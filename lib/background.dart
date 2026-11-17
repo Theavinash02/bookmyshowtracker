@@ -4,12 +4,12 @@ import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:http/http.dart' as http;
 
 import 'checker.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'storage.dart';
+import 'web_fetcher.dart';
 
 final service = FlutterBackgroundService();
 
@@ -80,23 +80,28 @@ Future<void> onServiceStart(ServiceInstance svc) async {
   });
   svc.on('checkNow').listen((_) => wakeUp());
 
-  final client = http.Client();
   final rnd = Random();
   while (!stopped) {
+    // New completer before the cycle, so a "checkNow" (e.g. config edited)
+    // that arrives mid-cycle triggers an immediate re-check afterwards.
+    wake = Completer<void>();
     TrackerConfig? cfg;
     try {
       cfg = await Storage.loadConfig();
-      await runOneCycle(svc, client, cfg);
+      final loader = PageLoader();
+      try {
+        await runOneCycle(svc, loader.load, cfg);
+      } finally {
+        await loader.close();
+      }
     } catch (e) {
       await _setForeground(svc, 'BMS Tracker – error', 'Will retry: $e');
     }
     if (stopped) break;
     final base = max(30, cfg?.intervalSeconds ?? 60);
     final delay = Duration(seconds: base + rnd.nextInt(10));
-    wake = Completer<void>();
     await Future.any([Future<void>.delayed(delay), wake.future]);
   }
-  client.close();
 }
 
 Future<void> _setForeground(ServiceInstance svc, String title, String body) async {
@@ -107,7 +112,7 @@ Future<void> _setForeground(ServiceInstance svc, String title, String body) asyn
 
 /// One pass over all enabled movies. Fires alarms for new openings.
 Future<void> runOneCycle(
-    ServiceInstance svc, http.Client client, TrackerConfig cfg) async {
+    ServiceInstance svc, PageFetch fetch, TrackerConfig cfg) async {
   final movies = cfg.movies.where((m) => m.enabled).toList();
   final now = DateTime.now();
   if (movies.isEmpty) {
@@ -123,7 +128,7 @@ Future<void> runOneCycle(
   final watchAll = cfg.alertAnyTheater || cfg.selectedTheaters.isEmpty;
 
   for (final movie in movies) {
-    final results = await checkMovie(client: client, config: cfg, movie: movie);
+    final results = await checkMovie(fetch: fetch, config: cfg, movie: movie);
     final open = results.where((r) => r.outcome == Outcome.open).toList();
     anyBlocked |= results.any((r) => r.outcome == Outcome.blocked);
 

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 
 import 'background.dart';
@@ -10,6 +9,7 @@ import 'checker.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'storage.dart';
+import 'web_fetcher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -139,11 +139,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     setState(() => testing = true);
-    final client = http.Client();
+    final loader = PageLoader();
     final report = <Widget>[];
     try {
       for (final m in movies) {
-        final res = await checkMovie(client: client, config: c, movie: m);
+        final res = await checkMovie(fetch: loader.load, config: c, movie: m);
         report.add(Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Text(m.title,
@@ -167,7 +167,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         }
       }
     } finally {
-      client.close();
+      await loader.close();
     }
     if (!mounted) return;
     setState(() => testing = false);
@@ -253,17 +253,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
     if (url == null || extractUrl(url) == null) return;
-    final client = http.Client();
+    final loader = PageLoader();
     List<String> names = [];
     String? err;
     try {
-      final page = await fetchPage(client, extractUrl(url)!);
+      final page = await loader.load(extractUrl(url)!);
       names = extractVenueNames(page.body);
       if (names.isEmpty) err = 'No theater names found (HTTP ${page.status}).';
     } catch (e) {
       err = '$e';
     } finally {
-      client.close();
+      await loader.close();
     }
     if (!mounted) return;
     if (err != null) {

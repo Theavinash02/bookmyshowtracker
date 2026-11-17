@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.trichy.bms_tracker"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

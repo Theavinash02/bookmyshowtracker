@@ -115,15 +115,22 @@ class DateCheck {
   final String detail;
 }
 
-bool _looksBlocked(FetchedPage p) {
-  if (p.status == 403 || p.status == 429 || p.status == 503) return true;
-  final head = p.body.length > 4000 ? p.body.substring(0, 4000) : p.body;
+/// True for Cloudflare / bot-protection interstitial pages.
+bool looksLikeChallenge(String html) {
+  final head = html.length > 6000 ? html.substring(0, 6000) : html;
   final l = head.toLowerCase();
   return l.contains('just a moment') ||
       l.contains('cf-chl') ||
+      l.contains('challenge-platform') ||
       l.contains('attention required') ||
-      l.contains('access denied');
+      l.contains('verify you are human');
 }
+
+bool _looksBlocked(FetchedPage p) =>
+    p.status == 403 ||
+    p.status == 429 ||
+    p.status == 503 ||
+    looksLikeChallenge(p.body);
 
 /// Decides, from a fetched show-times page, whether booking is open
 /// and at which of [theaters]. Pure function, unit-tested.
@@ -216,9 +223,12 @@ Future<FetchedPage> fetchPage(http.Client client, String url) async {
   throw Exception('Too many redirects');
 }
 
+/// Loads a page and reports its final URL (after redirects).
+typedef PageFetch = Future<FetchedPage> Function(String url);
+
 /// Checks every configured date of [movie].
 Future<List<DateCheck>> checkMovie({
-  required http.Client client,
+  required PageFetch fetch,
   required TrackerConfig config,
   required Movie movie,
 }) async {
@@ -227,7 +237,7 @@ Future<List<DateCheck>> checkMovie({
     final url = buildShowtimesUrl(
         config.showtimesTemplate, config.city, movie, date);
     try {
-      final page = await fetchPage(client, url);
+      final page = await fetch(url);
       results.add(analyzePage(
         page: page,
         movie: movie,
