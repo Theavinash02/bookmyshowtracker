@@ -19,10 +19,25 @@ class Storage {
     final s = await _p.getString(_kConfig);
     if (s == null) return defaultConfig();
     try {
-      return TrackerConfig.fromJson(s);
+      return await _addNewDefaultTheaters(TrackerConfig.fromJson(s));
     } catch (_) {
       return defaultConfig();
     }
+  }
+
+  static const _kDefaultsVersion = 'defaults_version';
+  static const _defaultsVersion = 2;
+
+  /// Adds theaters introduced in app updates (once, so deletions stick).
+  static Future<TrackerConfig> _addNewDefaultTheaters(TrackerConfig c) async {
+    final v = (await _p.getInt(_kDefaultsVersion)) ?? 1;
+    if (v >= _defaultsVersion) return c;
+    final have = c.theaters.map((t) => t.id).toSet();
+    final added = defaultTrichyTheaters().where((t) => !have.contains(t.id));
+    final updated = c.copyWith(theaters: [...added, ...c.theaters]);
+    await saveConfig(updated);
+    await _p.setInt(_kDefaultsVersion, _defaultsVersion);
+    return updated;
   }
 
   static Future<void> saveConfig(TrackerConfig c) =>
@@ -58,6 +73,7 @@ class Storage {
       _p.setString(_kStatus, jsonEncode(status));
 }
 
+// Fresh installs already contain the latest defaults.
 TrackerConfig defaultConfig() => TrackerConfig(
       city: 'tiruchirappalli',
       movies: [],

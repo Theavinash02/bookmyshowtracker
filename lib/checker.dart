@@ -83,10 +83,17 @@ String normalize(String s) =>
 
 /// True if [keyword] occurs in [normalizedBody] starting at a word
 /// boundary ("Sona" matches "Sona Mina" but not "personal").
+/// Several spellings can be given separated by "|", e.g.
+/// "Thiruverumbur|Tiruverumbur".
 bool keywordMatches(String normalizedBody, String keyword) {
-  final k = normalize(keyword);
-  if (k.isEmpty) return false;
-  return RegExp('(^| )${RegExp.escape(k)}').hasMatch(normalizedBody);
+  for (final alt in keyword.split('|')) {
+    final k = normalize(alt);
+    if (k.isEmpty) continue;
+    if (RegExp('(^| )${RegExp.escape(k)}').hasMatch(normalizedBody)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 enum Outcome { notOpen, open, blocked, error }
@@ -269,6 +276,28 @@ List<String> extractVenueNames(String html) {
     }
     names.add(name.trim());
   }
+  if (names.isEmpty) names.addAll(_venueNamesFromText(html));
   final list = names.toList()..sort();
   return list;
+}
+
+/// Fallback for the rendered page text: a cinema name is a line such as
+/// "LA Cinemas: Thiruverumbur" followed within a few lines by show times.
+List<String> _venueNamesFromText(String html) {
+  final i = html.indexOf('<!--TEXT-->');
+  final text = i >= 0 ? html.substring(i + 11) : html;
+  final lines = text
+      .split('\n')
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty)
+      .toList();
+  final out = <String>{};
+  for (var j = 0; j < lines.length; j++) {
+    final l = lines[j];
+    if (l.length < 6 || l.length > 120 || _showTimeRe.hasMatch(l)) continue;
+    if (!l.contains(':') || l.contains('<')) continue;
+    final ahead = lines.skip(j + 1).take(5);
+    if (ahead.any((x) => _showTimeRe.hasMatch(x))) out.add(l);
+  }
+  return out.toList();
 }

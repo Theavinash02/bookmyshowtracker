@@ -101,6 +101,21 @@ void main() {
     });
   });
 
+  test('keyword alternatives', () {
+    expect(keywordMatches(normalize('LA Cinemas: Tiruverumbur'),
+        'Thiruverumbur|Tiruverumbur'), isTrue);
+    expect(keywordMatches(normalize('LA Cinemas: Maris'),
+        'Thiruverumbur|Tiruverumbur'), isFalse);
+  });
+
+  test('extractVenueNames from rendered text', () {
+    const page = '<html></html>\n<!--TEXT-->\nMegastar Cinemas: Premium Large Format\n'
+        '1.1 km (In Trichy) | Cancellation available\n08:00 AM\nDolbyAtmos\n'
+        'LA Cinemas: Thiruverumbur\n11:50 AM\nUnable to find: what you want';
+    expect(extractVenueNames(page),
+        ['LA Cinemas: Thiruverumbur', 'Megastar Cinemas: Premium Large Format']);
+  });
+
   test('extractVenueNames', () {
     expect(
         extractVenueNames(

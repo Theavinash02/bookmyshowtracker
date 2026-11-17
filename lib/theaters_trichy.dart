@@ -7,6 +7,10 @@ import 'models.dart';
 /// theater's BookMyShow name differs, edit it in the app or use
 /// "Load theaters from BookMyShow".
 List<Theater> defaultTrichyTheaters() => [
+      Theater(
+          name: 'LA Cinemas: Thiruverumbur',
+          keyword: 'Thiruverumbur|Tiruverumbur|Thiruverambur|Thiruvarumbur'),
+      Theater(name: 'Megastar Cinemas', keyword: 'Megastar'),
       Theater(name: 'LA Cinemas - Maris Complex', keyword: 'Maris'),
       Theater(name: 'Sona Mina Cinemas', keyword: 'Sona'),
       Theater(name: 'Rambha / Ramba Theatre', keyword: 'Ramb'),

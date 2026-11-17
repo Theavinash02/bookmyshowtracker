@@ -530,6 +530,12 @@ class _MovieDialogState extends State<MovieDialog> {
                   'https://in.bookmyshow.com/movies/tiruchirappalli/avengers-doomsday/ET00…',
               errorText: error,
               errorMaxLines: 3,
+              helperText:
+                  'Each language/format (Tamil, English, 3D…) has its own code on '
+                  'BookMyShow. Add one entry per version you would watch: on '
+                  'in.bookmyshow.com pick the language, open the show-times page '
+                  'and copy its link (…/buytickets/ET00…/date).',
+              helperMaxLines: 6,
             ),
           ),
           TextField(
@@ -597,7 +603,8 @@ class _TheaterDialogState extends State<TheaterDialog> {
             decoration: const InputDecoration(
                 labelText: 'Match keyword',
                 helperText:
-                    'A distinctive word from the theater name as shown on BookMyShow',
+                    'A distinctive word from the theater name as shown on '
+                    'BookMyShow. Several spellings: Thiruverumbur|Tiruverumbur',
                 helperMaxLines: 2)),
       ]),
       actions: [
