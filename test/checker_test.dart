@@ -164,6 +164,38 @@ void main() {
       expect(byV['ET00422222']!.detail, contains('different movie'));
     });
 
+    test('pressing Book tickets: the landed URL gives the open version', () async {
+      final parent = eng.copyWith(slug: 'avengers-doomsday');
+      const after =
+          'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217?etCodes=ET00526312&language=tamil&refEventCode=ET00526312';
+      String? clickedUrl;
+      final v = await discoverVersions(
+        (url) async => FetchedPage(200, Uri.parse(url), ''),
+        parent,
+        click: (url, text) async {
+          clickedUrl = url;
+          expect(text, 'Book tickets');
+          return FetchedPage(200, Uri.parse(after), '<html>Avengers: Doomsday - (Tamil)</html>');
+        },
+      );
+      expect(clickedUrl, 'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00439706');
+      expect(v.map((e) => '${e.eventCode}/${e.slug}'),
+          ['ET00439706/avengers-doomsday', 'ET00526312/avengers-doomsday']);
+    });
+
+    test('no Book tickets button yet: falls back to the page, then just itself', () async {
+      final v = await discoverVersions(
+          (url) async => FetchedPage(200, Uri.parse(url), 'Mark interested'), eng,
+          click: (url, text) async => null);
+      expect(v.single.eventCode, 'ET00439706');
+    });
+
+    test('etCodes with several versions', () {
+      final v = extractVersions('', eng,
+          landedUrl: 'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217?etCodes=ET00526312,ET00526314,ET00526313&refEventCode=ET00526312');
+      expect(v.map((e) => e.eventCode), ['ET00439706', 'ET00526312', 'ET00526314', 'ET00526313']);
+    });
+
     test('allVersions defaults to true, including old saved movies', () {
       final json = '{"movies":[{"title":"t","url":"u","eventCode":"ET1","slug":"s","startDate":0}],"theaters":[]}';
       expect(TrackerConfig.fromJson(json).movies.single.allVersions, isTrue);

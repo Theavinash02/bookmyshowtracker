@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart' show Size;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -69,9 +70,12 @@ class WebFetcher {
     _status = 200;
     await c.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
     await _loaded!.future.timeout(const Duration(seconds: 40));
+    return _settle(c, url);
+  }
 
-    // Wait for a Cloudflare check to finish and for JavaScript-rendered
-    // content to settle (page text unchanged across two polls).
+  /// Waits for a Cloudflare check to finish and for JavaScript-rendered
+  /// content to settle (page text unchanged across two polls).
+  Future<FetchedPage> _settle(InAppWebViewController c, String url) async {
     var html = '';
     var last = -1;
     final deadline = DateTime.now().add(const Duration(seconds: 30));
@@ -92,6 +96,34 @@ class WebFetcher {
     final status = looksLikeChallenge(html) ? 403 : _status;
     return FetchedPage(
         status, Uri.parse(current?.toString() ?? url), html);
+  }
+
+  /// Loads [url], clicks the element whose text is [buttonText] (like a
+  /// person pressing "Book tickets"), and returns the resulting page:
+  /// its URL (if it navigated) and DOM (including any picker that opened).
+  /// Returns null if there was no such button.
+  Future<FetchedPage?> clickAndCapture(String url, String buttonText) async {
+    final before = await fetch(url);
+    final c = await _controller();
+    final js = '''(function(){
+      var want = ${jsonEncode(buttonText.toLowerCase())};
+      var els = Array.prototype.slice.call(
+          document.querySelectorAll('button,a,[role=button],div,span'));
+      var b = els.find(function(e){
+        return e.innerText && e.innerText.trim().toLowerCase() === want; });
+      if (!b) return 'none';
+      b.click();
+      return 'clicked';
+    })()''';
+    final r = await c.evaluateJavascript(source: js);
+    if (r != 'clicked') return null;
+    _loaded = Completer<void>();
+    // Either a navigation (wait for it) or an in-page picker (just settle).
+    try {
+      await _loaded!.future.timeout(const Duration(seconds: 8));
+    } catch (_) {}
+    final after = await _settle(c, before.finalUrl.toString());
+    return after;
   }
 
   Future<void> dispose() async {
@@ -126,6 +158,16 @@ class PageLoader {
       }
     }
     return fetchPage(_client, url);
+  }
+
+  /// See [WebFetcher.clickAndCapture]; null without a WebView or button.
+  Future<FetchedPage?> click(String url, String buttonText) async {
+    if (_webBroken) return null;
+    try {
+      return await _web.clickAndCapture(url, buttonText);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> close() async {

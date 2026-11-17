@@ -90,7 +90,7 @@ Future<void> onServiceStart(ServiceInstance svc) async {
       cfg = await Storage.loadConfig();
       final loader = PageLoader();
       try {
-        await runOneCycle(svc, loader.load, cfg);
+        await runOneCycle(svc, loader.load, cfg, click: loader.click);
       } finally {
         await loader.close();
       }
@@ -110,16 +110,24 @@ Future<void> _setForeground(ServiceInstance svc, String title, String body) asyn
   }
 }
 
-/// Discovered language/format versions per movie id, refreshed hourly.
+/// Discovered language/format versions per movie id.
 final _versionCache = <String, (DateTime, List<MovieVersion>)>{};
 
-Future<List<MovieVersion>> _versionsFor(PageFetch fetch, Movie m) async {
+typedef PageClick = Future<FetchedPage?> Function(String url, String buttonText);
+
+Future<List<MovieVersion>> _versionsFor(
+    PageFetch fetch, PageClick? click, Movie m) async {
   if (!m.allVersions) return [MovieVersion(m.eventCode, m.slug)];
   final c = _versionCache[m.id];
-  if (c != null && DateTime.now().difference(c.$1) < const Duration(hours: 1)) {
+  // Until other versions show up (usually when booking opens and the
+  // "Book tickets" button appears), look again every cycle; after that,
+  // refresh every 30 minutes.
+  if (c != null &&
+      c.$2.length > 1 &&
+      DateTime.now().difference(c.$1) < const Duration(minutes: 30)) {
     return c.$2;
   }
-  final v = await discoverVersions(fetch, m);
+  final v = await discoverVersions(fetch, m, click: click);
   _versionCache[m.id] = (DateTime.now(), v);
   return v;
 }
@@ -142,7 +150,8 @@ String summarize(List<DateCheck> results, List<DateTime> dates) =>
 
 /// One pass over all enabled movies. Fires alarms for new openings.
 Future<void> runOneCycle(
-    ServiceInstance svc, PageFetch fetch, TrackerConfig cfg) async {
+    ServiceInstance svc, PageFetch fetch, TrackerConfig cfg,
+    {PageClick? click}) async {
   final movies = cfg.movies.where((m) => m.enabled).toList();
   final now = DateTime.now();
   if (movies.isEmpty) {
@@ -158,7 +167,7 @@ Future<void> runOneCycle(
   final watchAll = cfg.alertAnyTheater || cfg.selectedTheaters.isEmpty;
 
   for (final movie in movies) {
-    final versions = await _versionsFor(fetch, movie);
+    final versions = await _versionsFor(fetch, click, movie);
     final results = await checkMovie(
         fetch: fetch, config: cfg, movie: movie, versions: versions);
     final open = results.where((r) => r.outcome == Outcome.open).toList();

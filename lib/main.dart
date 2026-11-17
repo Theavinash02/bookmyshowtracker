@@ -143,7 +143,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final report = <Widget>[];
     try {
       for (final m in movies) {
-        final versions = await discoverVersions(loader.load, m);
+        final versions = await discoverVersions(loader.load, m, click: loader.click);
         final res = await checkMovie(
             fetch: loader.load, config: c, movie: m, versions: versions);
         report.add(Padding(

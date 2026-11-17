@@ -320,43 +320,72 @@ String baseMovieName(String slug) {
 String movieInfoUrl(Movie m) =>
     'https://in.bookmyshow.com/movies/${m.city}/${m.slug}/${m.eventCode}';
 
-/// Finds the event codes of all language/format versions of [movie] in its
-/// BookMyShow movie page. Always includes the movie's own code first.
-List<MovieVersion> extractVersions(String html, Movie movie) {
+/// Finds the event codes of all language/format versions of [movie] in a
+/// BookMyShow page (and optionally the URL it navigated to). Always
+/// includes the movie's own code first. Most reliable sources first.
+List<MovieVersion> extractVersions(String html, Movie movie, {String? landedUrl}) {
   final base = baseMovieName(movie.slug).replaceAll(' ', '-');
   final found = <MovieVersion>{MovieVersion(movie.eventCode, movie.slug)};
-  // Links: /movies/<city>/<slug>/[buytickets/]ET...
   final linkRe = RegExp(
       r'/movies/[a-z0-9-]+/([a-z0-9-]+)/(?:buytickets/)?(ET\d{8})',
       caseSensitive: false);
+  // 1. Where "Book tickets" led, e.g. .../avengers-doomsday/buytickets/ET00526312/...
+  if (landedUrl != null) {
+    final m = linkRe.firstMatch(landedUrl);
+    if (m != null) found.add(MovieVersion(m.group(2)!.toUpperCase(), m.group(1)!.toLowerCase()));
+  }
+  // Slug for codes found without one: the one "Book tickets" used, else ours.
+  final defaultSlug = found.length > 1 ? found.last.slug : movie.slug;
+  // 2. Links whose slug is this movie's.
   for (final m in linkRe.allMatches(html)) {
     final slug = m.group(1)!.toLowerCase();
     if (slug.startsWith(base)) {
       found.add(MovieVersion(m.group(2)!.toUpperCase(), slug));
     }
   }
-  // Embedded data: "eventCode":"ET..." (other movies are filtered out later
-  // by checking the show-times page title).
+  // 3. Query parameters (etCodes=ET..,ET..&refEventCode=ET..) and embedded
+  //    data ("eventCode":"ET..."). Codes of other movies are filtered later
+  //    by checking the show-times page title.
   final codeRe = RegExp(
-      r'"(?:eventCode|EventCode|childEventCode|event_code)"\s*:\s*"(ET\d{8})"');
-  for (final m in codeRe.allMatches(html)) {
-    found.add(MovieVersion(m.group(1)!.toUpperCase(), movie.slug));
+      r'(?:"(?:eventCode|EventCode|childEventCode|event_code|refEventCode)"\s*:\s*"|etCodes=(?:ET\d{8}(?:,|%2C))*|refEventCode=)(ET\d{8})',
+      caseSensitive: false);
+  for (final src in [landedUrl ?? '', html]) {
+    for (final list in RegExp(r'etCodes=([^&"\x27\s]+)', caseSensitive: false).allMatches(src)) {
+      for (final c in RegExp(r'ET\d{8}', caseSensitive: false).allMatches(list.group(1)!)) {
+        found.add(MovieVersion(c.group(0)!.toUpperCase(), defaultSlug));
+      }
+    }
+    for (final m in codeRe.allMatches(src)) {
+      found.add(MovieVersion(m.group(1)!.toUpperCase(), defaultSlug));
+    }
   }
   return found.toList();
 }
 
 /// Discovers [movie]'s versions; on any failure returns just the movie.
-Future<List<MovieVersion>> discoverVersions(PageFetch fetch, Movie movie) async {
+/// With [click], it also presses "Book tickets" on the movie page, as a
+/// person would, and records where that leads.
+Future<List<MovieVersion>> discoverVersions(PageFetch fetch, Movie movie,
+    {Future<FetchedPage?> Function(String url, String buttonText)? click}) async {
   final own = [MovieVersion(movie.eventCode, movie.slug)];
   if (!movie.allVersions) return own;
+  final found = <MovieVersion>{...own};
   try {
-    final page = await fetch(movieInfoUrl(movie));
-    if (page.status >= 400 || looksLikeChallenge(page.body)) return own;
-    // Cap to keep each cycle short.
-    return extractVersions(page.body, movie).take(15).toList();
-  } catch (_) {
-    return own;
-  }
+    final info = movieInfoUrl(movie);
+    final clicked = click == null ? null : await click(info, 'Book tickets');
+    if (clicked != null && clicked.status < 400 && !looksLikeChallenge(clicked.body)) {
+      found.addAll(extractVersions(clicked.body, movie,
+          landedUrl: clicked.finalUrl.toString()));
+    }
+    if (found.length == 1) {
+      final page = await fetch(info);
+      if (page.status < 400 && !looksLikeChallenge(page.body)) {
+        found.addAll(extractVersions(page.body, movie));
+      }
+    }
+  } catch (_) {}
+  // Cap to keep each cycle short.
+  return found.take(20).toList();
 }
 
 String _pageTitle(String html) =>
