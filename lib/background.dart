@@ -203,6 +203,7 @@ Future<void> runOneCycle(
         body: 'Open now at ${parts.join('; ')}. Tap to open BookMyShow.',
         url: first.url,
       );
+      await Storage.logAlarm('${movie.title} (${movie.city}): ${parts.join('; ')}');
       newKeys.addAll(freshTheaters.map((id) => '${movie.id}|$id'));
     } else if (open.isNotEmpty &&
         watchAll &&
@@ -215,6 +216,7 @@ Future<void> runOneCycle(
             ' Tap to open BookMyShow.',
         url: open.first.url,
       );
+      await Storage.logAlarm('${movie.title} (${movie.city}): booking opened (other theater)');
       newKeys.add('${movie.id}|*');
     }
 
