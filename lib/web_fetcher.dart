@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/widgets.dart' show Size;
@@ -6,6 +7,47 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 
 import 'checker.dart';
+
+/// Injected before any page script runs: keeps a copy of the data the page
+/// downloads (fetch/XHR responses that look like show-time data), so the
+/// theater list can be read even when the page is never drawn. That is the
+/// case in the background tracker, where the hidden browser has no screen
+/// and BookMyShow's lazily drawn theater list stays empty.
+const _captureScript = r'''
+(function () {
+  if (window.__bmsCap) return;
+  window.__bmsCap = [];
+  var total = 0;
+  function keep(t) {
+    try {
+      if (typeof t !== 'string' || t.length < 20 || total > 4000000) return;
+      if (!/venue|showtime|show_time|session|cinema/i.test(t)) return;
+      total += t.length;
+      window.__bmsCap.push(t);
+    } catch (e) {}
+  }
+  var of = window.fetch;
+  if (of) {
+    window.fetch = function () {
+      return of.apply(this, arguments).then(function (r) {
+        try { r.clone().text().then(keep, function () {}); } catch (e) {}
+        return r;
+      });
+    };
+  }
+  var os = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function () {
+    try {
+      this.addEventListener('load', function () {
+        try {
+          if (this.responseType === '' || this.responseType === 'text') keep(this.responseText);
+        } catch (e) {}
+      });
+    } catch (e) {}
+    return os.apply(this, arguments);
+  };
+})();
+''';
 
 /// Loads pages in a hidden, real Android WebView (Chrome engine).
 ///
@@ -26,6 +68,11 @@ class WebFetcher {
       // A tall "screen" so lazily-rendered theater lists render fully
       // (pixels; a hidden WebView otherwise has a tiny viewport).
       initialSize: const Size(1080, 12000),
+      initialUserScripts: UnmodifiableListView([
+        UserScript(
+            source: _captureScript,
+            injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START),
+      ]),
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
         domStorageEnabled: true,
@@ -60,7 +107,9 @@ class WebFetcher {
   Future<String> _dom(InAppWebViewController c) async {
     final r = await c.evaluateJavascript(
         source: '(document.documentElement ? document.documentElement.outerHTML : "")'
-            ' + "\\n<!--TEXT-->\\n" + (document.body ? document.body.innerText : "")');
+            ' + "\\n<!--TEXT-->\\n" + (document.body ? document.body.innerText : "")'
+            ' + (window.__bmsCap || []).map(function (t) {'
+            ' return "\\n<!--DATA-->\\n" + t; }).join("")');
     return r is String ? r : '';
   }
 
