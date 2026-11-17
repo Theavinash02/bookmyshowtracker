@@ -54,6 +54,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   TrackerConfig? cfg;
   bool running = false;
   Map<String, dynamic>? status;
+  List<(DateTime, String)> alarms = [];
   StreamSubscription? _statusSub;
   bool testing = false;
 
@@ -81,17 +82,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final c = await Storage.loadConfig();
     final r = await Storage.isRunning() && await service.isRunning();
     final s = await Storage.lastStatus();
+    final a = await Storage.alarmLog();
     if (!mounted) return;
     setState(() {
       cfg = c;
       running = r;
       status = s;
+      alarms = a;
     });
   }
 
   Future<void> _loadStatus() async {
     final s = await Storage.lastStatus();
-    if (mounted) setState(() => status = s);
+    final a = await Storage.alarmLog();
+    if (mounted) {
+      setState(() {
+        status = s;
+        alarms = a;
+      });
+    }
   }
 
   Future<void> _save(TrackerConfig c) async {
@@ -149,6 +158,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final loader = PageLoader();
     final report = <Widget>[];
     final started = DateTime.now();
+    final alerted = await Storage.alertedKeys();
     try {
       for (final m in movies) {
         final versions = await discoverVersions(loader.load, m, click: loader.click);
@@ -172,7 +182,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             dense: true,
             contentPadding: EdgeInsets.zero,
             title: Text('${r.label.isNotEmpty ? '${r.label} · ' : r.version.isEmpty ? '' : '${r.version} · '}${shortDate(r.date)} – $label'
-                '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => t.name).join(', ')}'}'),
+                '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => '${t.name} (${alerted.contains('${m.id}|${t.id}') ? 'alarm already rang' : running ? 'alarm rings at next background check' : 'alarm needs tracking ON'})').join(', ')}'}'),
             subtitle: SelectableText('${r.detail}\n${r.debug}'),
             onTap: () => openBookMyShow(r.url),
           ));
@@ -189,11 +199,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Check result (no alarm) · ${took}s'),
+        title: Text('Check result · ${took}s'),
         content: SingleChildScrollView(
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: report)),
+                children: [
+                  const Text(
+                      'This test never rings. The background tracker rings once per '
+                      'theater per movie (Settings → Reset alerts to ring again).',
+                      style: TextStyle(fontStyle: FontStyle.italic)),
+                  ...report,
+                ])),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('OK'))
@@ -353,9 +369,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final st = status;
-    final stTime = st == null
+    final stTime = st?['time'] == null
         ? null
-        : DateTime.fromMillisecondsSinceEpoch(st['time'] as int);
+        : DateTime.fromMillisecondsSinceEpoch(st!['time'] as int);
+    final errTime = st?['errorTime'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(st!['errorTime'] as int);
+    final showError = st?['error'] != null &&
+        errTime != null &&
+        (stTime == null || !errTime.isBefore(stTime));
     return Scaffold(
       appBar: AppBar(
         title: const Text('BMS Tracker · Trichy'),
@@ -391,6 +413,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             ? 'Tracking ON – every ~${c.intervalSeconds}s'
                             : 'Tracking OFF – turn on the switch above',
                         style: Theme.of(context).textTheme.titleMedium),
+                    if (showError)
+                      Text(
+                          '⚠ Background check failed at '
+                          '${TimeOfDay.fromDateTime(errTime).format(context)}: ${st!['error']}',
+                          style: const TextStyle(color: Colors.red)),
                     if (stTime != null) ...[
                       const SizedBox(height: 4),
                       Text('Last check: ${TimeOfDay.fromDateTime(stTime).format(context)}'
@@ -437,6 +464,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
               ),
             ),
+            if (alarms.isNotEmpty) ...[
+              const _Header('Recent alarms'),
+              for (final a in alarms.take(5))
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.alarm_on),
+                  title: Text(a.$2),
+                  subtitle: Text('${TimeOfDay.fromDateTime(a.$1).format(context)} · ${shortDate(a.$1)}'),
+                ),
+            ],
             const _Header('Movies'),
             if (c.movies.isEmpty)
               const Padding(

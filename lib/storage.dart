@@ -64,6 +64,24 @@ class Storage {
 
   static Future<void> clearAlerted() => _p.remove(_kAlerted);
 
+  static const _kAlarmLog = 'alarm_log';
+
+  /// Most recent alarms the tracker rang, newest first: `millis|text`.
+  static Future<List<(DateTime, String)>> alarmLog() async {
+    final raw = (await _p.getStringList(_kAlarmLog)) ?? [];
+    return raw.map((e) {
+      final i = e.indexOf('|');
+      final t = int.tryParse(i > 0 ? e.substring(0, i) : '') ?? 0;
+      return (DateTime.fromMillisecondsSinceEpoch(t), i > 0 ? e.substring(i + 1) : e);
+    }).toList();
+  }
+
+  static Future<void> logAlarm(String text) async {
+    final raw = (await _p.getStringList(_kAlarmLog)) ?? [];
+    raw.insert(0, '${DateTime.now().millisecondsSinceEpoch}|$text');
+    await _p.setStringList(_kAlarmLog, raw.take(20).toList());
+  }
+
   /// Last background-check summary: {time, lines: [..], open: bool}.
   static Future<Map<String, dynamic>?> lastStatus() async {
     final s = await _p.getString(_kStatus);

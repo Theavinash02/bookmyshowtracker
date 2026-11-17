@@ -96,6 +96,14 @@ Future<void> onServiceStart(ServiceInstance svc) async {
       }
     } catch (e) {
       await _setForeground(svc, 'BMS Tracker – error', 'Will retry: $e');
+      // Show the failure in the app too, keeping the last good results.
+      final prev = await Storage.lastStatus() ?? {};
+      await Storage.saveStatus({
+        ...prev,
+        'error': '$e',
+        'errorTime': DateTime.now().millisecondsSinceEpoch,
+      });
+      svc.invoke('status');
     }
     if (stopped) break;
     final base = max(30, cfg?.intervalSeconds ?? 60);
@@ -203,6 +211,7 @@ Future<void> runOneCycle(
         body: 'Open now at ${parts.join('; ')}. Tap to open BookMyShow.',
         url: first.url,
       );
+      await Storage.logAlarm('${movie.title} (${movie.city}): ${parts.join('; ')}');
       newKeys.addAll(freshTheaters.map((id) => '${movie.id}|$id'));
     } else if (open.isNotEmpty &&
         watchAll &&
@@ -215,6 +224,7 @@ Future<void> runOneCycle(
             ' Tap to open BookMyShow.',
         url: open.first.url,
       );
+      await Storage.logAlarm('${movie.title} (${movie.city}): booking opened (other theater)');
       newKeys.add('${movie.id}|*');
     }
 
