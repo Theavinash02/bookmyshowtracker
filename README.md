@@ -24,7 +24,7 @@ Every merge to `main` publishes a new release named `v<version>-build<N>`.
 
 ## Set up (takes 2 minutes, do it today)
 
-1. **Add the movie.** In the BookMyShow app or website, open *Avengers: Doomsday* with Tiruchirappalli as the city. Tap **Share → Copy link**. In BMS Tracker, tap **+ Movie** and paste the link. It must contain the code `ET00…`.
+1. **Add the movie.** In the BookMyShow app or website, open *Avengers: Doomsday* with Trichy as the city. Tap **Share → Copy link**. In BMS Tracker, tap **+ Movie** and paste the link. It must contain the code `ET00…`.
 2. **Pick the dates.** Set the first show date (18 Dec 2026 by default) and how many days to watch (1–7).
 3. **Tick your theaters.** If a name in the list is wrong, use **Load from BookMyShow**: paste the "Book tickets" link of *any movie running in Trichy today* and pick theaters from the real list. You can also edit the match keyword yourself.
 4. Turn on the **switch at the top right**. Allow notifications, and allow the app to **ignore battery optimisation**. This is important.
@@ -44,6 +44,14 @@ changed its link format. Open the movie's "Book tickets" page in a browser,
 look at the link, and update **Settings → Show-times URL pattern**. The
 pattern can use these placeholders: `{city} {slug} {event} {date}`.
 
+## City: use "Trichy", not "Tiruchirappalli"
+
+BookMyShow has two separate cities for Trichy. The website's
+**Tiruchirappalli** city lists only a few cinemas. **Trichy**, which is the city
+the BookMyShow app uses, lists them all (LA Cinema Thiruverumbur, Maris,
+Sona Mina, Star…). The tracker uses `trichy` by default. You can change it in
+**Settings → BookMyShow city**: use the word after `/movies/` in a BookMyShow link.
+
 ## Keep it alive
 
 - Leave the "BMS Tracker – watching" notification in place. That notification is the background service.
@@ -53,7 +61,7 @@ pattern can use these placeholders: `{city} {slug} {event} {date}`.
 ## How it works
 
 For each date it fetches
-`https://in.bookmyshow.com/movies/{city}/{slug}/buytickets/{event}/{YYYYMMDD}`.
+`https://in.bookmyshow.com/movies/{city}/{slug}/buytickets/{event}/{YYYYMMDD}` (city = `trichy`).
 
 - If BookMyShow redirects away from the show-times page, or the page has no show times, booking is not open.
 - If show times are present, booking is open. The app then looks for your theater keywords on the page. A keyword only matches at the start of a word, so "Sona" matches "Sona Mina" but not "personal".

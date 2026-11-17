@@ -1,7 +1,7 @@
 name: bms_tracker
 description: "Alerts you when BookMyShow ticket booking opens at your chosen Trichy theaters."
 publish_to: 'none'
-version: 0.1.4+5
+version: 0.1.5+6
 
 environment:
   sdk: ^3.14.0

@@ -564,7 +564,7 @@ class _MovieDialogState extends State<MovieDialog> {
             decoration: InputDecoration(
               labelText: 'BookMyShow movie link',
               hintText:
-                  'https://in.bookmyshow.com/movies/tiruchirappalli/avengers-doomsday/ET00…',
+                  'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00…',
               errorText: error,
               errorMaxLines: 3,
               helperText:
@@ -740,7 +740,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
           TextField(
               controller: city,
               decoration: const InputDecoration(
-                  labelText: 'BookMyShow city', helperText: 'tiruchirappalli')),
+                  labelText: 'BookMyShow city',
+                  helperText: 'As in the link: in.bookmyshow.com/movies/<city>/… (Trichy = trichy)',
+                  helperMaxLines: 2)),
           TextField(
               controller: template,
               maxLines: 3,
@@ -775,7 +777,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               intervalSeconds: interval.round(),
               alertAnyTheater: any,
               city: city.text.trim().isEmpty
-                  ? 'tiruchirappalli'
+                  ? defaultCity
                   : city.text.trim().toLowerCase(),
               showtimesTemplate: template.text.trim().isEmpty
                   ? defaultShowtimesTemplate
