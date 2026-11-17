@@ -87,6 +87,11 @@ void main() {
           'Sona Mina 10:30 AM');
       expect(r.outcome, Outcome.notOpen);
     });
+    test('redirected to another date = not open', () {
+      final r = run(200, showUrl.replaceAll('20261218', '20261117'),
+          'Sona Mina 10:30 AM');
+      expect(r.outcome, Outcome.notOpen);
+    });
     test('showtimes page without times = not open', () {
       final r = run(200, showUrl, 'Sona Mina, no shows available');
       expect(r.outcome, Outcome.notOpen);
