@@ -369,9 +369,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final st = status;
-    final stTime = st == null
+    final stTime = st?['time'] == null
         ? null
-        : DateTime.fromMillisecondsSinceEpoch(st['time'] as int);
+        : DateTime.fromMillisecondsSinceEpoch(st!['time'] as int);
+    final errTime = st?['errorTime'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(st!['errorTime'] as int);
+    final showError = st?['error'] != null &&
+        errTime != null &&
+        (stTime == null || !errTime.isBefore(stTime));
     return Scaffold(
       appBar: AppBar(
         title: const Text('BMS Tracker · Trichy'),
@@ -407,6 +413,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             ? 'Tracking ON – every ~${c.intervalSeconds}s'
                             : 'Tracking OFF – turn on the switch above',
                         style: Theme.of(context).textTheme.titleMedium),
+                    if (showError)
+                      Text(
+                          '⚠ Background check failed at '
+                          '${TimeOfDay.fromDateTime(errTime).format(context)}: ${st!['error']}',
+                          style: const TextStyle(color: Colors.red)),
                     if (stTime != null) ...[
                       const SizedBox(height: 4),
                       Text('Last check: ${TimeOfDay.fromDateTime(stTime).format(context)}'
