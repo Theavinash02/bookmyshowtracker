@@ -15,7 +15,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initNotifications(handleTaps: true);
   await configureBackgroundService();
-  // App launched by tapping the alarm while it was closed.
+  // App launched by the user tapping the alarm while it was closed: open the
+  // BookMyShow page of that alarm. (Alarms never open anything by themselves.)
   final launch = await notifications.getNotificationAppLaunchDetails();
   if (launch?.didNotificationLaunchApp ?? false) {
     unawaited(openBookMyShow(launch!.notificationResponse?.payload));
@@ -141,7 +142,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final android = notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
-    await android?.requestFullScreenIntentPermission();
     if (!await Permission.ignoreBatteryOptimizations.isGranted) {
       await Permission.ignoreBatteryOptimizations.request();
     }

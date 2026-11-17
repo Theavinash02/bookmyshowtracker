@@ -81,7 +81,9 @@ Future<void> showTicketsOpenAlarm({
     importance: Importance.max,
     priority: Priority.max,
     category: AndroidNotificationCategory.alarm,
-    fullScreenIntent: true,
+    // No full-screen intent: the alarm only rings (heads-up + insistent
+    // sound). BookMyShow opens only when the user taps the notification.
+    fullScreenIntent: false,
     audioAttributesUsage: AudioAttributesUsage.alarm,
     sound: _alarmSound,
     vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
