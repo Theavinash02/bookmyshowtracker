@@ -2,6 +2,10 @@ import 'dart:convert';
 
 import 'checker.dart' show defaultShowtimesTemplate;
 
+/// BookMyShow has two cities for Trichy: "tiruchirappalli" lists only a few
+/// cinemas, "trichy" (what the BookMyShow app uses) lists them all.
+const defaultCity = 'trichy';
+
 /// A movie being tracked on BookMyShow.
 class Movie {
   Movie({
@@ -120,7 +124,7 @@ class TrackerConfig {
     this.showtimesTemplate = defaultShowtimesTemplate,
   });
 
-  /// BookMyShow city slug, e.g. "tiruchirappalli".
+  /// BookMyShow city slug, e.g. "trichy".
   final String city;
   final List<Movie> movies;
   final List<Theater> theaters;
@@ -165,7 +169,7 @@ class TrackerConfig {
   factory TrackerConfig.fromJson(String s) {
     final m = jsonDecode(s) as Map<String, dynamic>;
     return TrackerConfig(
-      city: (m['city'] as String?) ?? 'tiruchirappalli',
+      city: (m['city'] as String?) ?? defaultCity,
       movies: ((m['movies'] as List?) ?? [])
           .map((e) => Movie.fromMap(e as Map<String, dynamic>))
           .toList(),

@@ -121,6 +121,15 @@ void main() {
         ['LA Cinemas: Thiruverumbur', 'Megastar Cinemas: Premium Large Format']);
   });
 
+  test('real BookMyShow names match the starter keywords', () {
+    final body = normalize('LA Cinema: Thiruverumbur 06:25 PM LA CINEMA: MARIS, TRICHY '
+        'STAR CINEMAS A/C RGB LASER: TRICHY LA Cinema: Sona Mina, Trichy');
+    for (final k in ['Thiruverumbur|Tiruverumbur', 'Maris', 'Star Cinemas', 'Sona']) {
+      expect(keywordMatches(body, k), isTrue, reason: k);
+    }
+    expect(keywordMatches(normalize('Megastar Cinemas'), 'Star Cinemas'), isFalse);
+  });
+
   test('extractVenueNames', () {
     expect(
         extractVenueNames(

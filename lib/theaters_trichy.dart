@@ -8,11 +8,13 @@ import 'models.dart';
 /// "Load theaters from BookMyShow".
 List<Theater> defaultTrichyTheaters() => [
       Theater(
-          name: 'LA Cinemas: Thiruverumbur',
+          name: 'LA Cinema: Thiruverumbur',
           keyword: 'Thiruverumbur|Tiruverumbur|Thiruverambur|Thiruvarumbur'),
       Theater(name: 'Megastar Cinemas', keyword: 'Megastar'),
-      Theater(name: 'LA Cinemas - Maris Complex', keyword: 'Maris'),
-      Theater(name: 'Sona Mina Cinemas', keyword: 'Sona'),
+      Theater(name: 'LA Cinema: Maris, Trichy', keyword: 'Maris'),
+      Theater(name: 'LA Cinema: Sona Mina, Trichy', keyword: 'Sona'),
+      Theater(
+          name: 'Star Cinemas A/C RGB Laser: Trichy', keyword: 'Star Cinemas'),
       Theater(name: 'Rambha / Ramba Theatre', keyword: 'Ramb'),
       Theater(name: 'Kalaiarangam', keyword: 'Kalaiarangam'),
       Theater(name: 'Urvasi Theatre', keyword: 'Urvasi'),

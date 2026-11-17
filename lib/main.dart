@@ -236,12 +236,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         title: const Text('Load theaters from BookMyShow'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text(
-              'In BookMyShow, open ANY movie that is running in Trichy today, '
-              'tap "Book tickets" (the page that lists theaters and show '
-              'times), share/copy that link and paste it here.'),
+              'Paste the BookMyShow link of ANY movie that is running in '
+              'Trichy today (movie page or "Book tickets" page).'),
           TextField(
               controller: ctrl,
-              decoration: const InputDecoration(labelText: 'Show-times link')),
+              decoration: const InputDecoration(labelText: 'BookMyShow link')),
         ]),
         actions: [
           TextButton(
@@ -253,21 +252,59 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
     if (url == null || extractUrl(url) == null) return;
+    final link = extractUrl(url)!;
+    // A plain movie page lists no theaters: open its show-times
+    // ("Book tickets") page for today, then the next two days.
+    final candidates = <String>[];
+    final parsed = parseMovieUrl(link, city: cfg!.city);
+    if (link.toLowerCase().contains('buytickets') || parsed == null) {
+      candidates.add(link);
+    } else {
+      final today = DateTime.now();
+      final m = Movie(
+          title: '',
+          url: link,
+          eventCode: parsed.eventCode,
+          slug: parsed.slug,
+          startDate: today);
+      for (var i = 0; i < 3; i++) {
+        candidates.add(buildShowtimesUrl(cfg!.showtimesTemplate, cfg!.city, m,
+            DateTime(today.year, today.month, today.day + i)));
+      }
+    }
+    setState(() => testing = true);
+    _snack('Loading theaters from BookMyShow…');
     final loader = PageLoader();
     List<String> names = [];
     String? err;
     try {
-      final page = await loader.load(extractUrl(url)!);
-      names = extractVenueNames(page.body);
-      if (names.isEmpty) err = 'No theater names found (HTTP ${page.status}).';
+      for (final c in candidates) {
+        final page = await loader.load(c);
+        names = extractVenueNames(page.body);
+        if (names.isNotEmpty) break;
+        err = 'No theater names found.\n${describePage(page)}';
+      }
     } catch (e) {
       err = '$e';
     } finally {
       await loader.close();
     }
     if (!mounted) return;
-    if (err != null) {
-      _snack('Could not load: $err  Add theaters manually instead.');
+    setState(() => testing = false);
+    if (names.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Could not load theaters'),
+          content: SingleChildScrollView(
+              child: SelectableText('${err ?? ''}\n\n'
+                  'Add theaters manually with "Add theater" instead.')),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('OK'))
+          ],
+        ),
+      );
       return;
     }
     final existing = cfg!.theaters.map((t) => normalize(t.name)).toSet();
@@ -527,7 +564,7 @@ class _MovieDialogState extends State<MovieDialog> {
             decoration: InputDecoration(
               labelText: 'BookMyShow movie link',
               hintText:
-                  'https://in.bookmyshow.com/movies/tiruchirappalli/avengers-doomsday/ET00…',
+                  'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00…',
               errorText: error,
               errorMaxLines: 3,
               helperText:
@@ -703,7 +740,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
           TextField(
               controller: city,
               decoration: const InputDecoration(
-                  labelText: 'BookMyShow city', helperText: 'tiruchirappalli')),
+                  labelText: 'BookMyShow city',
+                  helperText: 'As in the link: in.bookmyshow.com/movies/<city>/… (Trichy = trichy)',
+                  helperMaxLines: 2)),
           TextField(
               controller: template,
               maxLines: 3,
@@ -738,7 +777,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               intervalSeconds: interval.round(),
               alertAnyTheater: any,
               city: city.text.trim().isEmpty
-                  ? 'tiruchirappalli'
+                  ? defaultCity
                   : city.text.trim().toLowerCase(),
               showtimesTemplate: template.text.trim().isEmpty
                   ? defaultShowtimesTemplate
