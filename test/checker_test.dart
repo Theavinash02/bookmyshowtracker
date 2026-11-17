@@ -84,6 +84,28 @@ void main() {
     });
   });
 
+  test('Avengers Tamil MS-Infinity link from the user round-trips', () {
+    const link =
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217';
+    final p = parseMovieUrl(link)!;
+    expect([p.eventCode, p.slug, p.city], ['ET00526312', 'avengers-doomsday', 'trichy']);
+    final m = movie().copyWith(city: p.city);
+    final rebuilt = Movie(
+        title: 't', url: link, eventCode: p.eventCode, slug: p.slug,
+        city: p.city!, startDate: DateTime(2026, 12, 17));
+    expect(buildShowtimesUrl(defaultShowtimesTemplate, rebuilt, DateTime(2026, 12, 17)), link);
+    expect(m.city, 'trichy');
+    final r = analyzePage(
+        page: FetchedPage(200, Uri.parse(link),
+            'Megastar Cinemas: Premium Large Format ATMOS LASER 08:00 AM 11:50 AM'),
+        movie: rebuilt,
+        date: DateTime(2026, 12, 17),
+        requestedUrl: link,
+        theaters: [Theater(name: 'Megastar', keyword: 'Megastar', selected: true)]);
+    expect(r.outcome, Outcome.open);
+    expect(r.matchedTheaters.single.name, 'Megastar');
+  });
+
   test('buildShowtimesUrl', () {
     expect(
         buildShowtimesUrl(
