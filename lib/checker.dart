@@ -112,6 +112,7 @@ class DateCheck {
     required this.outcome,
     this.matchedTheaters = const [],
     this.detail = '',
+    this.debug = '',
   });
   final DateTime date;
   final String url;
@@ -120,6 +121,34 @@ class DateCheck {
   /// Selected theaters whose name appeared on an open show-times page.
   final List<Theater> matchedTheaters;
   final String detail;
+
+  /// Diagnostics shown by "Check now" (page size, times, cinemas seen).
+  final String debug;
+
+  DateCheck withDebug(String d) => DateCheck(
+      date: date,
+      url: url,
+      outcome: outcome,
+      matchedTheaters: matchedTheaters,
+      detail: detail,
+      debug: d);
+}
+
+/// Human-readable summary of what a fetched page contained.
+String describePage(FetchedPage p) {
+  final times = _showTimeRe.allMatches(p.body).length;
+  final venues = extractVenueNames(p.body);
+  final title =
+      RegExp(r'<title[^>]*>([^<]*)</title>', caseSensitive: false)
+              .firstMatch(p.body)
+              ?.group(1)
+              ?.trim() ??
+          '';
+  return 'HTTP ${p.status} · ${p.body.length} chars · $times show times\n'
+      'Page title: $title\n'
+      'Landed on: ${p.finalUrl}\n'
+      'Cinemas seen (${venues.length}): '
+      '${venues.isEmpty ? '-' : venues.take(15).join(' | ')}';
 }
 
 /// True for Cloudflare / bot-protection interstitial pages.
@@ -251,7 +280,7 @@ Future<List<DateCheck>> checkMovie({
         date: date,
         requestedUrl: url,
         theaters: config.selectedTheaters,
-      ));
+      ).withDebug(describePage(page)));
     } catch (e) {
       results.add(DateCheck(
           date: date, url: url, outcome: Outcome.error, detail: '$e'));

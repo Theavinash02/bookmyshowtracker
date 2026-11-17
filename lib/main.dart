@@ -161,7 +161,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             contentPadding: EdgeInsets.zero,
             title: Text('${shortDate(r.date)} – $label'
                 '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => t.name).join(', ')}'}'),
-            subtitle: Text('${r.detail}\n${r.url}'),
+            subtitle: SelectableText('${r.detail}\n${r.debug}'),
             onTap: () => openBookMyShow(r.url),
           ));
         }
