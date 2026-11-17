@@ -20,10 +20,13 @@ final _showTimeRe = RegExp(r'\b\d{1,2}:\d{2}\s?[AP]\.?M\b', caseSensitive: false
 
 /// Result of parsing a BookMyShow movie link.
 class ParsedMovieUrl {
-  ParsedMovieUrl(this.url, this.eventCode, this.slug);
+  ParsedMovieUrl(this.url, this.eventCode, this.slug, [this.city]);
   final String url;
   final String eventCode;
   final String slug;
+
+  /// City slug from the link ("trichy" in /movies/trichy/...), if present.
+  final String? city;
 
   String get suggestedTitle => slug
       .split('-')
@@ -60,8 +63,16 @@ ParsedMovieUrl? parseMovieUrl(String input, {String city = ''}) {
         slug.endsWith('-${city.toLowerCase()}')) {
       slug = slug.substring(0, slug.length - city.length - 1);
     }
-    return ParsedMovieUrl(url, event, slug);
+    return ParsedMovieUrl(url, event, slug, _cityFromSegments(segs));
   }
+  return null;
+}
+
+/// `/movies/CITY/...` (current) or `/CITY/movies/...` (older links).
+String? _cityFromSegments(List<String> segs) {
+  final i = segs.indexWhere((s) => s.toLowerCase() == 'movies');
+  if (i == 0 && segs.length > 2) return segs[1].toLowerCase();
+  if (i == 1) return segs[0].toLowerCase();
   return null;
 }
 
@@ -70,9 +81,9 @@ String formatBmsDate(DateTime d) =>
     '${d.month.toString().padLeft(2, '0')}'
     '${d.day.toString().padLeft(2, '0')}';
 
-String buildShowtimesUrl(String template, String city, Movie movie, DateTime date) =>
+String buildShowtimesUrl(String template, Movie movie, DateTime date) =>
     template
-        .replaceAll('{city}', city)
+        .replaceAll('{city}', movie.city)
         .replaceAll('{slug}', movie.slug)
         .replaceAll('{event}', movie.eventCode)
         .replaceAll('{date}', formatBmsDate(date));
@@ -113,7 +124,15 @@ class DateCheck {
     this.matchedTheaters = const [],
     this.detail = '',
     this.debug = '',
+    this.version = '',
+    this.label = '',
   });
+
+  /// Human name of the version, e.g. "Avengers: Doomsday - (Tamil)".
+  final String label;
+
+  /// Event code of the language/format version this result is for.
+  final String version;
   final DateTime date;
   final String url;
   final Outcome outcome;
@@ -125,13 +144,15 @@ class DateCheck {
   /// Diagnostics shown by "Check now" (page size, times, cinemas seen).
   final String debug;
 
-  DateCheck withDebug(String d) => DateCheck(
+  DateCheck withDebug(String d, {String? version, String? label}) => DateCheck(
       date: date,
       url: url,
       outcome: outcome,
       matchedTheaters: matchedTheaters,
       detail: detail,
-      debug: d);
+      debug: d,
+      version: version ?? this.version,
+      label: label ?? this.label);
 }
 
 /// Human-readable summary of what a fetched page contained.
@@ -149,6 +170,32 @@ String describePage(FetchedPage p) {
       'Landed on: ${p.finalUrl}\n'
       'Cinemas seen (${venues.length}): '
       '${venues.isEmpty ? '-' : venues.take(15).join(' | ')}';
+}
+
+/// The part of a show-times page a person sees as the theater list: the
+/// rendered page text (not hidden page data), cut before BookMyShow's
+/// end-of-list footer ("Unable to find what you are looking for?"), so
+/// cinema names in the footer or in embedded data can't cause a match.
+/// Pages fetched without the WebView (no rendered text) are used whole.
+String visibleListText(String body) {
+  const marker = '<!--TEXT-->';
+  final i = body.indexOf(marker);
+  if (i < 0) return body;
+  var text = body.substring(i + marker.length);
+  final end = text.toLowerCase().indexOf('unable to find what you are looking for');
+  if (end > 0) text = text.substring(0, end);
+  return text;
+}
+
+/// Human name of a show-times page's version, from its title:
+/// "Avengers: Doomsday - (Tamil) Movie Showtimes in Trichy & ..." ->
+/// "Avengers: Doomsday - (Tamil)". Empty if unknown.
+String versionLabel(String html) {
+  final t = _pageTitle(html).replaceAll('&amp;', '&').trim();
+  final i = t.toLowerCase().indexOf(' movie showtimes');
+  if (i > 0) return t.substring(0, i).trim();
+  final j = t.toLowerCase().indexOf(' showtimes');
+  return j > 0 ? t.substring(0, j).trim() : '';
 }
 
 /// True for Cloudflare / bot-protection interstitial pages.
@@ -209,14 +256,6 @@ DateCheck analyzePage({
         outcome: Outcome.notOpen,
         detail: 'Redirected away from show-times (to $finalUrl).');
   }
-  final hasShowTimes = _showTimeRe.hasMatch(page.body);
-  if (!hasShowTimes) {
-    return DateCheck(
-        date: date,
-        url: requestedUrl,
-        outcome: Outcome.notOpen,
-        detail: 'Show-times page has no show times yet.');
-  }
   // BookMyShow sends you to another date (often today) when the requested
   // date has no shows yet: that is NOT open for the requested date.
   final landedDate = RegExp(r'/(\d{8})(?:[/?#]|$)').firstMatch(finalUrl)?.group(1);
@@ -225,9 +264,19 @@ DateCheck analyzePage({
         date: date,
         url: requestedUrl,
         outcome: Outcome.notOpen,
-        detail: 'No shows for this date yet (BookMyShow showed $landedDate instead).');
+        detail: 'No shows for this date yet: BookMyShow showed '
+            '${landedDate.substring(6)}/${landedDate.substring(4, 6)} instead.');
   }
-  final body = normalize(page.body);
+  final visible = visibleListText(page.body);
+  final hasShowTimes = _showTimeRe.hasMatch(visible);
+  if (!hasShowTimes) {
+    return DateCheck(
+        date: date,
+        url: requestedUrl,
+        outcome: Outcome.notOpen,
+        detail: 'Show-times page has no show times yet.');
+  }
+  final body = normalize(visible);
   final matched = theaters.where((t) => keywordMatches(body, t.keyword)).toList();
   final missing = theaters.where((t) => !matched.contains(t)).map((t) => t.name);
   return DateCheck(
@@ -271,28 +320,173 @@ Future<FetchedPage> fetchPage(http.Client client, String url) async {
 /// Loads a page and reports its final URL (after redirects).
 typedef PageFetch = Future<FetchedPage> Function(String url);
 
-/// Checks every configured date of [movie].
+/// A language/format version of a movie (its own BookMyShow event code).
+class MovieVersion {
+  const MovieVersion(this.eventCode, this.slug);
+  final String eventCode;
+  final String slug;
+  @override
+  bool operator ==(Object other) =>
+      other is MovieVersion && other.eventCode == eventCode;
+  @override
+  int get hashCode => eventCode.hashCode;
+}
+
+const _versionWords = {
+  'english', 'tamil', 'hindi', 'telugu', 'malayalam', 'kannada', 'bengali',
+  'marathi', 'punjabi', 'gujarati', 'odia', '2d', '3d', 'imax', '4dx', 'ms',
+  'infinity', 'vision', 'dolby', 'cinema', 'screenx', 'ice', 'pxl',
+};
+
+/// Movie name without language/format words: "avengers-doomsday-english"
+/// -> "avengers doomsday".
+String baseMovieName(String slug) {
+  final words = slug.toLowerCase().split('-').where((w) => w.isNotEmpty).toList();
+  while (words.length > 1 && _versionWords.contains(words.last)) {
+    words.removeLast();
+  }
+  return words.join(' ');
+}
+
+/// Movie info page, where BookMyShow lists the movie's versions.
+String movieInfoUrl(Movie m) =>
+    'https://in.bookmyshow.com/movies/${m.city}/${m.slug}/${m.eventCode}';
+
+/// Finds the event codes of all language/format versions of [movie] in a
+/// BookMyShow page (and optionally the URL it navigated to). Always
+/// includes the movie's own code first. Most reliable sources first.
+List<MovieVersion> extractVersions(String html, Movie movie, {String? landedUrl}) {
+  final base = baseMovieName(movie.slug).replaceAll(' ', '-');
+  final found = <MovieVersion>{MovieVersion(movie.eventCode, movie.slug)};
+  final linkRe = RegExp(
+      r'/movies/[a-z0-9-]+/([a-z0-9-]+)/(?:buytickets/)?(ET\d{8})',
+      caseSensitive: false);
+  // 1. Where "Book tickets" led, e.g. .../avengers-doomsday/buytickets/ET00526312/...
+  if (landedUrl != null) {
+    final m = linkRe.firstMatch(landedUrl);
+    if (m != null) found.add(MovieVersion(m.group(2)!.toUpperCase(), m.group(1)!.toLowerCase()));
+  }
+  // Slug for codes found without one: the one "Book tickets" used, else ours.
+  final defaultSlug = found.length > 1 ? found.last.slug : movie.slug;
+  // 2. Links whose slug is this movie's.
+  for (final m in linkRe.allMatches(html)) {
+    final slug = m.group(1)!.toLowerCase();
+    if (slug.startsWith(base)) {
+      found.add(MovieVersion(m.group(2)!.toUpperCase(), slug));
+    }
+  }
+  // 3. Query parameters (etCodes=ET..,ET..&refEventCode=ET..) and embedded
+  //    data ("eventCode":"ET..."). Codes of other movies are filtered later
+  //    by checking the show-times page title.
+  final codeRe = RegExp(
+      r'(?:"(?:eventCode|EventCode|childEventCode|event_code|refEventCode)"\s*:\s*"|etCodes=(?:ET\d{8}(?:,|%2C))*|refEventCode=)(ET\d{8})',
+      caseSensitive: false);
+  for (final src in [landedUrl ?? '', html]) {
+    for (final list in RegExp(r'etCodes=([^&"\x27\s]+)', caseSensitive: false).allMatches(src)) {
+      for (final c in RegExp(r'ET\d{8}', caseSensitive: false).allMatches(list.group(1)!)) {
+        found.add(MovieVersion(c.group(0)!.toUpperCase(), defaultSlug));
+      }
+    }
+    for (final m in codeRe.allMatches(src)) {
+      found.add(MovieVersion(m.group(1)!.toUpperCase(), defaultSlug));
+    }
+  }
+  return found.toList();
+}
+
+/// Result of opening a page and pressing a button on it.
+class ClickResult {
+  ClickResult(this.page, {required this.clicked});
+
+  /// The page after the click if [clicked], else the page as loaded.
+  final FetchedPage page;
+  final bool clicked;
+}
+
+/// Opens a page and presses the button with the given text.
+typedef PageClick = Future<ClickResult?> Function(String url, String buttonText);
+
+bool _usable(FetchedPage p) => p.status < 400 && !looksLikeChallenge(p.body);
+
+/// Discovers [movie]'s versions; on any failure returns just the movie.
+/// With [click], it presses "Book tickets" on the movie page, as a person
+/// would, and records where that leads. If the movie page doesn't load
+/// with the link's name (e.g. "avengers-doomsday-english"), it retries
+/// with the plain movie name ("avengers-doomsday").
+Future<List<MovieVersion>> discoverVersions(PageFetch fetch, Movie movie,
+    {PageClick? click}) async {
+  final own = [MovieVersion(movie.eventCode, movie.slug)];
+  if (!movie.allVersions) return own;
+  final found = <MovieVersion>{...own};
+  final baseSlug = baseMovieName(movie.slug).replaceAll(' ', '-');
+  for (final slug in {movie.slug, baseSlug}) {
+    try {
+      final info = movieInfoUrl(movie.copyWith(slug: slug));
+      final clicked = click == null ? null : await click(info, 'Book tickets');
+      final page = clicked?.page ?? await fetch(info);
+      if (!_usable(page)) continue;
+      found.addAll(extractVersions(page.body, movie,
+          landedUrl: clicked?.clicked == true ? page.finalUrl.toString() : null));
+      break;
+    } catch (_) {
+      // Try the next name.
+    }
+  }
+  // Cap to keep each cycle short.
+  return found.take(20).toList();
+}
+
+String _pageTitle(String html) =>
+    RegExp(r'<title[^>]*>([^<]*)</title>', caseSensitive: false)
+        .firstMatch(html)
+        ?.group(1) ??
+    '';
+
+/// Checks every configured date of [movie], for each of its [versions]
+/// (defaults to just the movie itself).
 Future<List<DateCheck>> checkMovie({
   required PageFetch fetch,
   required TrackerConfig config,
   required Movie movie,
+  List<MovieVersion>? versions,
 }) async {
   final results = <DateCheck>[];
-  for (final date in movie.dates) {
-    final url = buildShowtimesUrl(
-        config.showtimesTemplate, config.city, movie, date);
-    try {
-      final page = await fetch(url);
-      results.add(analyzePage(
-        page: page,
-        movie: movie,
-        date: date,
-        requestedUrl: url,
-        theaters: config.selectedTheaters,
-      ).withDebug(describePage(page)));
-    } catch (e) {
-      results.add(DateCheck(
-          date: date, url: url, outcome: Outcome.error, detail: '$e'));
+  final base = normalize(baseMovieName(movie.slug));
+  for (final v in versions ?? [MovieVersion(movie.eventCode, movie.slug)]) {
+    final isOwn = v.eventCode == movie.eventCode;
+    final vm = movie.copyWith(eventCode: v.eventCode, slug: v.slug);
+    for (final date in movie.dates) {
+      final url = buildShowtimesUrl(config.showtimesTemplate, vm, date);
+      try {
+        final page = await fetch(url);
+        var r = analyzePage(
+          page: page,
+          movie: vm,
+          date: date,
+          requestedUrl: url,
+          theaters: config.selectedTheaters,
+        );
+        // A discovered code could belong to another movie: require the
+        // movie's name in the page title.
+        if (!isOwn &&
+            r.outcome == Outcome.open &&
+            !normalize(_pageTitle(page.body)).contains(base)) {
+          r = DateCheck(
+              date: date,
+              url: url,
+              outcome: Outcome.notOpen,
+              detail: 'Ignored: page is for a different movie.');
+        }
+        results.add(r.withDebug(describePage(page),
+            version: v.eventCode, label: versionLabel(page.body)));
+      } catch (e) {
+        results.add(DateCheck(
+            date: date,
+            url: url,
+            outcome: Outcome.error,
+            detail: '$e',
+            version: v.eventCode));
+      }
     }
   }
   return results;

@@ -103,6 +103,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _snack(String msg) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg)));
 
+  /// True when the last check is much older than one interval plus the
+  /// time a check takes, i.e. the background tracker probably stopped.
+  bool _isStale(DateTime last, int? tookSeconds, TrackerConfig c) {
+    final expected = c.intervalSeconds + (tookSeconds ?? 60) + 10;
+    return DateTime.now().difference(last).inSeconds > expected * 3 + 120;
+  }
+
   // ---------------------------------------------------------------- tracking
 
   Future<void> _toggle(bool on) async {
@@ -141,12 +148,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => testing = true);
     final loader = PageLoader();
     final report = <Widget>[];
+    final started = DateTime.now();
     try {
       for (final m in movies) {
-        final res = await checkMovie(fetch: loader.load, config: c, movie: m);
+        final versions = await discoverVersions(loader.load, m, click: loader.click);
+        final res = await checkMovie(
+            fetch: loader.load, config: c, movie: m, versions: versions);
         report.add(Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Text(m.title,
+          child: Text(
+              '${m.title} · ${m.city}\n'
+              'Languages/formats found: ${versions.length} (${versions.map((v) => v.eventCode).join(', ')})',
               style: const TextStyle(fontWeight: FontWeight.bold)),
         ));
         for (final r in res) {
@@ -159,22 +171,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           report.add(ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            title: Text('${shortDate(r.date)} – $label'
+            title: Text('${r.label.isNotEmpty ? '${r.label} · ' : r.version.isEmpty ? '' : '${r.version} · '}${shortDate(r.date)} – $label'
                 '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => t.name).join(', ')}'}'),
             subtitle: SelectableText('${r.detail}\n${r.debug}'),
             onTap: () => openBookMyShow(r.url),
           ));
         }
       }
+    } catch (e) {
+      report.add(Text('Check failed: $e', style: const TextStyle(color: Colors.red)));
     } finally {
       await loader.close();
+      if (mounted) setState(() => testing = false);
     }
     if (!mounted) return;
-    setState(() => testing = false);
+    final took = DateTime.now().difference(started).inSeconds;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Check result (no alarm)'),
+        title: Text('Check result (no alarm) · ${took}s'),
         content: SingleChildScrollView(
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,8 +209,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context: context, builder: (_) => MovieDialog(city: cfg!.city));
     if (m == null) return;
     final c = cfg!;
+    final existed = c.movies.any((x) => x.id == m.id);
     final list = [...c.movies.where((x) => x.id != m.id), m];
     await _save(c.copyWith(movies: list));
+    if (existed) _snack('${m.title} in ${m.city} was already added – updated it.');
   }
 
   Future<void> _editMovie(Movie m) async {
@@ -266,9 +283,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           url: link,
           eventCode: parsed.eventCode,
           slug: parsed.slug,
+          city: parsed.city ?? cfg!.city,
           startDate: today);
       for (var i = 0; i < 3; i++) {
-        candidates.add(buildShowtimesUrl(cfg!.showtimesTemplate, cfg!.city, m,
+        candidates.add(buildShowtimesUrl(cfg!.showtimesTemplate, m,
             DateTime(today.year, today.month, today.day + i)));
       }
     }
@@ -376,8 +394,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     if (stTime != null) ...[
                       const SizedBox(height: 4),
                       Text('Last check: ${TimeOfDay.fromDateTime(stTime).format(context)}'
-                          ' (${shortDate(stTime)})'),
-                      for (final l in (st!['lines'] as List)) Text('• $l'),
+                          ' (${shortDate(stTime)})'
+                          '${st!['took'] == null ? '' : ' · took ${st['took']}s'}'),
+                      if (running && _isStale(stTime, st['took'] as int?, c))
+                        const Text(
+                            '⚠ No check for a while: the phone may have paused the '
+                            'tracker. Set Battery → BMS Tracker → Unrestricted, keep '
+                            'the "watching" notification, then switch tracking off and on.',
+                            style: TextStyle(color: Colors.red)),
+                      for (final l in (st['lines'] as List)) Text('• $l'),
                       if (st['blocked'] == true)
                         const Text(
                             '⚠ BookMyShow refused some requests. If this keeps '
@@ -425,7 +450,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Card(
                 child: ListTile(
                   title: Text(m.title),
-                  subtitle: Text('${m.eventCode} · ${m.dates.map(shortDate).join(', ')}'),
+                  subtitle: Text('${m.dates.map(shortDate).join(', ')} · ${m.city} · all languages & formats'),
                   onTap: () => _editMovie(m),
                   leading: IconButton(
                     icon: const Icon(Icons.delete_outline),
@@ -446,10 +471,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
                 c.selectedTheaters.isEmpty
-                    ? 'No theater selected: you will be alerted when booking opens anywhere in ${c.city}.'
+                    ? 'No theater selected: the alarm rings when booking opens at any theater.'
                     : c.alertAnyTheater
-                        ? 'Alarm for your theaters, plus one alarm when booking opens anywhere in ${c.city}.'
-                        : 'Alarm only for the selected theaters.',
+                        ? 'Alarm for your theaters, plus one alarm when booking opens at any other theater.'
+                        : 'Alarm only when a selected theater has shows on your dates.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -512,25 +537,25 @@ class _MovieDialogState extends State<MovieDialog> {
   late final url = TextEditingController(text: widget.existing?.url ?? '');
   late final title = TextEditingController(text: widget.existing?.title ?? '');
   late DateTime start = widget.existing?.startDate ?? _defaultStart();
-  late int days = widget.existing?.days ?? 3;
+  late int days = widget.existing?.days ?? 1;
+  late final city = TextEditingController(text: widget.existing?.city ?? widget.city);
   String? error;
 
   static DateTime _defaultStart() {
-    // Avengers: Doomsday India release (18 Dec 2026). Editable.
-    final release = DateTime(2026, 12, 18);
     final today = DateTime.now();
-    final t = DateTime(today.year, today.month, today.day);
-    return release.isBefore(t) ? t : release;
+    return DateTime(today.year, today.month, today.day);
   }
 
   void _urlChanged(String v) {
-    final p = parseMovieUrl(v, city: widget.city);
+    final p = parseMovieUrl(v, city: city.text.trim());
     if (p != null && title.text.trim().isEmpty) title.text = p.suggestedTitle;
+    if (p?.city != null) city.text = p!.city!;
     setState(() => error = null);
   }
 
   void _submit() {
-    final p = parseMovieUrl(url.text, city: widget.city);
+    final p = parseMovieUrl(url.text, city: city.text.trim());
+    final c = city.text.trim().toLowerCase();
     if (p == null) {
       setState(() => error =
           'Link must contain the movie code (ET00…). Copy it from the movie page on BookMyShow.');
@@ -543,6 +568,8 @@ class _MovieDialogState extends State<MovieDialog> {
         url: p.url,
         eventCode: p.eventCode,
         slug: p.slug,
+        city: c.isEmpty ? (p.city ?? widget.city) : c,
+        allVersions: true, // every language & format is always checked
         startDate: start,
         days: days,
         enabled: widget.existing?.enabled ?? true,
@@ -564,24 +591,30 @@ class _MovieDialogState extends State<MovieDialog> {
             decoration: InputDecoration(
               labelText: 'BookMyShow movie link',
               hintText:
-                  'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00…',
+                  'https://in.bookmyshow.com/movies/trichy/<movie>/ET00…',
               errorText: error,
               errorMaxLines: 3,
               helperText:
-                  'Each language/format (Tamil, English, 3D…) has its own code on '
-                  'BookMyShow. Add one entry per version you would watch: on '
-                  'in.bookmyshow.com pick the language, open the show-times page '
-                  'and copy its link (…/buytickets/ET00…/date).',
-              helperMaxLines: 6,
+                  'Any BookMyShow link of the movie (movie page or "Book tickets" '
+                  'page). Every language and format is checked automatically.',
+              helperMaxLines: 4,
             ),
           ),
           TextField(
               controller: title,
               decoration: const InputDecoration(labelText: 'Title')),
+          TextField(
+              controller: city,
+              decoration: const InputDecoration(
+                  labelText: 'BookMyShow city',
+                  helperText:
+                      'Filled from the link. Add the same movie again with another '
+                      'city (e.g. trichy and tiruchirappalli) to watch both.',
+                  helperMaxLines: 3)),
           const SizedBox(height: 12),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('First show date to watch'),
+            title: const Text('Show date to watch'),
             subtitle: Text('${shortDate(start)} ${start.year}'),
             trailing: const Icon(Icons.calendar_month),
             onTap: () async {
@@ -595,7 +628,8 @@ class _MovieDialogState extends State<MovieDialog> {
             },
           ),
           Row(children: [
-            const Expanded(child: Text('Days to watch')),
+            const Expanded(
+                child: Text('Days to watch (from that date)')),
             IconButton(
                 onPressed: days > 1 ? () => setState(() => days--) : null,
                 icon: const Icon(Icons.remove)),
@@ -735,13 +769,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
             contentPadding: EdgeInsets.zero,
             value: any,
             onChanged: (v) => setState(() => any = v),
-            title: const Text('Also alarm when booking opens at any theater'),
+            title: const Text('Also alarm when booking opens at other theaters'),
+            subtitle: const Text('Off: alarm only for your selected theaters.'),
           ),
           TextField(
               controller: city,
               decoration: const InputDecoration(
-                  labelText: 'BookMyShow city',
-                  helperText: 'As in the link: in.bookmyshow.com/movies/<city>/… (Trichy = trichy)',
+                  labelText: 'Default BookMyShow city',
+                  helperText: 'Used when a movie link has no city. Each movie keeps the city from its own link.',
                   helperMaxLines: 2)),
           TextField(
               controller: template,

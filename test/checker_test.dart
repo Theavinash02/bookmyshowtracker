@@ -7,6 +7,7 @@ Movie movie() => Movie(
       url: 'x',
       eventCode: 'ET00123456',
       slug: 'avengers-doomsday',
+      city: 'tiruchirappalli',
       startDate: DateTime(2026, 12, 18),
       days: 3,
     );
@@ -61,10 +62,169 @@ void main() {
     });
   });
 
+  group('per-movie city', () {
+    test('city is read from the link', () {
+      expect(parseMovieUrl('https://in.bookmyshow.com/movies/trichy/avengers-doomsday-english/ET00439706')!.city, 'trichy');
+      expect(parseMovieUrl('https://in.bookmyshow.com/movies/tiruchirappalli/avengers-doomsday-english/ET00439706')!.city, 'tiruchirappalli');
+      expect(parseMovieUrl('https://in.bookmyshow.com/trichy/movies/x/ET00439706')!.city, 'trichy');
+      expect(parseMovieUrl('https://in.bookmyshow.com/buytickets/x-trichy/movie-tric-ET00439706-MT/20261217')!.city, isNull);
+    });
+    test('same movie in two cities = two entries with their own URLs', () {
+      final a = movie().copyWith(city: 'trichy');
+      final b = movie().copyWith(city: 'tiruchirappalli');
+      expect(a.id == b.id, isFalse);
+      expect(buildShowtimesUrl(defaultShowtimesTemplate, a, DateTime(2026, 12, 17)),
+          contains('/movies/trichy/'));
+      expect(buildShowtimesUrl(defaultShowtimesTemplate, b, DateTime(2026, 12, 17)),
+          contains('/movies/tiruchirappalli/'));
+    });
+    test('old saved movies get the global city', () {
+      final json = '{"city":"trichy","movies":[{"title":"t","url":"u","eventCode":"ET1","slug":"s","startDate":0}],"theaters":[]}';
+      expect(TrackerConfig.fromJson(json).movies.single.city, 'trichy');
+    });
+  });
+
+  test('Avengers Tamil MS-Infinity link from the user round-trips', () {
+    const link =
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217';
+    final p = parseMovieUrl(link)!;
+    expect([p.eventCode, p.slug, p.city], ['ET00526312', 'avengers-doomsday', 'trichy']);
+    final m = movie().copyWith(city: p.city);
+    final rebuilt = Movie(
+        title: 't', url: link, eventCode: p.eventCode, slug: p.slug,
+        city: p.city!, startDate: DateTime(2026, 12, 17));
+    expect(buildShowtimesUrl(defaultShowtimesTemplate, rebuilt, DateTime(2026, 12, 17)), link);
+    expect(m.city, 'trichy');
+    final r = analyzePage(
+        page: FetchedPage(200, Uri.parse(link),
+            'Megastar Cinemas: Premium Large Format ATMOS LASER 08:00 AM 11:50 AM'),
+        movie: rebuilt,
+        date: DateTime(2026, 12, 17),
+        requestedUrl: link,
+        theaters: [Theater(name: 'Megastar', keyword: 'Megastar', selected: true)]);
+    expect(r.outcome, Outcome.open);
+    expect(r.matchedTheaters.single.name, 'Megastar');
+  });
+
+  group('all languages & formats', () {
+    final eng = Movie(
+        title: 'Avengers',
+        url: 'u',
+        eventCode: 'ET00439706',
+        slug: 'avengers-doomsday-english',
+        city: 'trichy',
+        startDate: DateTime(2026, 12, 17),
+        days: 1);
+
+    test('baseMovieName strips language/format words', () {
+      expect(baseMovieName('avengers-doomsday-english'), 'avengers doomsday');
+      expect(baseMovieName('avengers-doomsday-tamil-3d'), 'avengers doomsday');
+      expect(baseMovieName('scene-tamil'), 'scene');
+      expect(baseMovieName('english'), 'english');
+    });
+
+    test('extractVersions finds sibling versions, skips other movies', () {
+      const html = '<a href="/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217">'
+          '<a href="/movies/trichy/avengers-doomsday-hindi/ET00439999">'
+          '<a href="/movies/trichy/some-other-film/ET00111111">'
+          '{"eventCode":"ET00422222"}';
+      final v = extractVersions(html, eng);
+      expect(v.map((e) => e.eventCode),
+          ['ET00439706', 'ET00526312', 'ET00439999', 'ET00422222']);
+      expect(v[1].slug, 'avengers-doomsday');
+      expect(v[2].slug, 'avengers-doomsday-hindi');
+    });
+
+    test('checkMovie checks each version; other-movie pages are ignored', () async {
+      final cfg = TrackerConfig(city: 'trichy', movies: [eng], theaters: [
+        Theater(name: 'Megastar', keyword: 'Megastar', selected: true)
+      ]);
+      Future<FetchedPage> fetch(String url) async {
+        if (url.contains('ET00526312')) {
+          return FetchedPage(200, Uri.parse(url),
+              '<title>Avengers: Doomsday Movie Showtimes in Trichy</title> Megastar 08:00 AM');
+        }
+        if (url.contains('ET00422222')) {
+          return FetchedPage(200, Uri.parse(url),
+              '<title>Some Other Film Showtimes</title> Megastar 09:00 AM');
+        }
+        // English: not open yet, BookMyShow shows today instead.
+        return FetchedPage(200, Uri.parse(url.replaceAll('20261217', '20261117')), '');
+      }
+      final res = await checkMovie(fetch: fetch, config: cfg, movie: eng, versions: const [
+        MovieVersion('ET00439706', 'avengers-doomsday-english'),
+        MovieVersion('ET00526312', 'avengers-doomsday'),
+        MovieVersion('ET00422222', 'avengers-doomsday-english'),
+      ]);
+      final byV = {for (final r in res) r.version: r};
+      expect(byV['ET00439706']!.outcome, Outcome.notOpen);
+      expect(byV['ET00526312']!.outcome, Outcome.open);
+      expect(byV['ET00526312']!.matchedTheaters.single.name, 'Megastar');
+      expect(byV['ET00422222']!.outcome, Outcome.notOpen);
+      expect(byV['ET00422222']!.detail, contains('different movie'));
+    });
+
+    test('pressing Book tickets: the landed URL gives the open version', () async {
+      final parent = eng.copyWith(slug: 'avengers-doomsday');
+      const after =
+          'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217?etCodes=ET00526312&language=tamil&refEventCode=ET00526312';
+      String? clickedUrl;
+      final v = await discoverVersions(
+        (url) async => FetchedPage(200, Uri.parse(url), ''),
+        parent,
+        click: (url, text) async {
+          clickedUrl = url;
+          expect(text, 'Book tickets');
+          return ClickResult(
+              FetchedPage(200, Uri.parse(after), '<html>Avengers: Doomsday - (Tamil)</html>'),
+              clicked: true);
+        },
+      );
+      expect(clickedUrl, 'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00439706');
+      expect(v.map((e) => '${e.eventCode}/${e.slug}'),
+          ['ET00439706/avengers-doomsday', 'ET00526312/avengers-doomsday']);
+    });
+
+    test('no Book tickets button yet: falls back to the page, then just itself', () async {
+      final v = await discoverVersions(
+          (url) async => FetchedPage(200, Uri.parse(url), 'Mark interested'), eng,
+          click: (url, text) async =>
+              ClickResult(FetchedPage(200, Uri.parse(url), 'Mark interested'), clicked: false));
+      expect(v.single.eventCode, 'ET00439706');
+    });
+
+    test('etCodes with several versions', () {
+      final v = extractVersions('', eng,
+          landedUrl: 'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217?etCodes=ET00526312,ET00526314,ET00526313&refEventCode=ET00526312');
+      expect(v.map((e) => e.eventCode), ['ET00439706', 'ET00526312', 'ET00526314', 'ET00526313']);
+    });
+
+    test('movie page retried with the plain movie name if the link name fails', () async {
+      final tried = <String>[];
+      final v = await discoverVersions((url) async {
+        tried.add(url);
+        return url.contains('avengers-doomsday-english')
+            ? FetchedPage(404, Uri.parse(url), 'not found')
+            : FetchedPage(200, Uri.parse(url),
+                '<a href="/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217">');
+      }, eng);
+      expect(tried, [
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday-english/ET00439706',
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00439706',
+      ]);
+      expect(v.map((e) => e.eventCode), ['ET00439706', 'ET00526312']);
+    });
+
+    test('allVersions defaults to true, including old saved movies', () {
+      final json = '{"movies":[{"title":"t","url":"u","eventCode":"ET1","slug":"s","startDate":0}],"theaters":[]}';
+      expect(TrackerConfig.fromJson(json).movies.single.allVersions, isTrue);
+    });
+  });
+
   test('buildShowtimesUrl', () {
     expect(
-        buildShowtimesUrl(defaultShowtimesTemplate, 'tiruchirappalli', movie(),
-            DateTime(2026, 12, 18)),
+        buildShowtimesUrl(
+            defaultShowtimesTemplate, movie(), DateTime(2026, 12, 18)),
         showUrl);
   });
 
@@ -91,6 +251,8 @@ void main() {
       final r = run(200, showUrl.replaceAll('20261218', '20261117'),
           'Sona Mina 10:30 AM');
       expect(r.outcome, Outcome.notOpen);
+      final empty = run(200, showUrl.replaceAll('20261218', '20261117'), 'nothing');
+      expect(empty.detail, contains('showed 17/11 instead'));
     });
     test('showtimes page without times = not open', () {
       final r = run(200, showUrl, 'Sona Mina, no shows available');
@@ -130,6 +292,50 @@ void main() {
     expect(keywordMatches(normalize('Megastar Cinemas'), 'Star Cinemas'), isFalse);
   });
 
+  group('visible theater list only', () {
+    const url =
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217';
+    final m = Movie(
+        title: 't', url: url, eventCode: 'ET00526312', slug: 'avengers-doomsday',
+        city: 'trichy', startDate: DateTime(2026, 12, 17));
+    final thiru = Theater(name: 'LA Cinema: Thiruverumbur', keyword: 'Thiruverumbur', selected: true);
+    final mega = Theater(name: 'Megastar', keyword: 'Megastar', selected: true);
+
+    DateCheck check(String body) => analyzePage(
+        page: FetchedPage(200, Uri.parse(url), body),
+        movie: m,
+        date: DateTime(2026, 12, 17),
+        requestedUrl: url,
+        theaters: [thiru, mega]);
+
+    test('footer and hidden data do not count as a theater listing', () {
+      const body = '<html><script>{"venueName":"LA Cinema: Thiruverumbur"}</script></html>'
+          '\n<!--TEXT-->\nMegastar Cinemas: Premium Large Format\n08:00 AM\n'
+          'Unable to find what you are looking for?\nCinemas in Trichy: LA Cinema: Thiruverumbur';
+      final r = check(body);
+      expect(r.outcome, Outcome.open);
+      expect(r.matchedTheaters.map((t) => t.name), ['Megastar']);
+      expect(r.detail, contains('Not on page yet: LA Cinema: Thiruverumbur'));
+    });
+
+    test('show times only in the footer = not open', () {
+      const body = '<html></html>\n<!--TEXT-->\nNo shows\n'
+          'Unable to find what you are looking for?\nCustomer care 10:00 AM';
+      expect(check(body).outcome, Outcome.notOpen);
+    });
+
+    test('pages without rendered text (HTTP fallback) are used whole', () {
+      expect(visibleListText('Megastar 08:00 AM'), 'Megastar 08:00 AM');
+    });
+  });
+
+  test('versionLabel', () {
+    expect(versionLabel('<title>Avengers: Doomsday - (Tamil) Movie Showtimes in Trichy &amp; Online Ticket Booking</title>'),
+        'Avengers: Doomsday - (Tamil)');
+    expect(versionLabel('<title>Scene Showtimes</title>'), 'Scene');
+    expect(versionLabel('<html></html>'), '');
+  });
+
   test('extractVenueNames', () {
     expect(
         extractVenueNames(
@@ -142,6 +348,7 @@ void main() {
         city: 'tiruchirappalli', movies: [movie()], theaters: theaters);
     final c2 = TrackerConfig.fromJson(c.toJson());
     expect(c2.movies.single.eventCode, 'ET00123456');
+    expect(c2.movies.single.city, 'tiruchirappalli');
     expect(c2.movies.single.dates.last, DateTime(2026, 12, 20));
     expect(c2.selectedTheaters.length, 3);
     expect(c2.showtimesTemplate, defaultShowtimesTemplate);

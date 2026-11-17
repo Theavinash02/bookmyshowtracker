@@ -90,7 +90,7 @@ Future<void> onServiceStart(ServiceInstance svc) async {
       cfg = await Storage.loadConfig();
       final loader = PageLoader();
       try {
-        await runOneCycle(svc, loader.load, cfg);
+        await runOneCycle(svc, loader.load, cfg, click: loader.click);
       } finally {
         await loader.close();
       }
@@ -110,9 +110,46 @@ Future<void> _setForeground(ServiceInstance svc, String title, String body) asyn
   }
 }
 
+/// Discovered language/format versions per movie id.
+final _versionCache = <String, (DateTime, List<MovieVersion>)>{};
+
+Future<List<MovieVersion>> _versionsFor(
+    PageFetch fetch, PageClick? click, Movie m) async {
+  if (!m.allVersions) return [MovieVersion(m.eventCode, m.slug)];
+  final c = _versionCache[m.id];
+  // Until other versions show up (usually when booking opens and the
+  // "Book tickets" button appears), look again every cycle; after that,
+  // refresh every 5 minutes, since more versions often open one by one.
+  if (c != null &&
+      c.$2.length > 1 &&
+      DateTime.now().difference(c.$1) < const Duration(minutes: 5)) {
+    return c.$2;
+  }
+  final v = await discoverVersions(fetch, m, click: click);
+  _versionCache[m.id] = (DateTime.now(), v);
+  return v;
+}
+
+/// One-line status per date: OPEN if any version is open.
+String summarize(List<DateCheck> results, List<DateTime> dates) =>
+    dates.map((d) {
+      final rs = results.where((r) => r.date == d).toList();
+      final open = rs.where((r) => r.outcome == Outcome.open).toList();
+      if (open.isNotEmpty) {
+        final names = {for (final r in open) ...r.matchedTheaters.map((t) => t.name)};
+        return '${shortDate(d)}: OPEN${names.isEmpty ? '' : ' @ ${names.join(', ')}'}';
+      }
+      if (rs.any((r) => r.outcome == Outcome.blocked)) return '${shortDate(d)}: blocked';
+      if (rs.isNotEmpty && rs.every((r) => r.outcome == Outcome.error)) {
+        return '${shortDate(d)}: error';
+      }
+      return '${shortDate(d)}: not yet';
+    }).join(' · ');
+
 /// One pass over all enabled movies. Fires alarms for new openings.
 Future<void> runOneCycle(
-    ServiceInstance svc, PageFetch fetch, TrackerConfig cfg) async {
+    ServiceInstance svc, PageFetch fetch, TrackerConfig cfg,
+    {PageClick? click}) async {
   final movies = cfg.movies.where((m) => m.enabled).toList();
   final now = DateTime.now();
   if (movies.isEmpty) {
@@ -128,66 +165,71 @@ Future<void> runOneCycle(
   final watchAll = cfg.alertAnyTheater || cfg.selectedTheaters.isEmpty;
 
   for (final movie in movies) {
-    final results = await checkMovie(fetch: fetch, config: cfg, movie: movie);
+    final versions = await _versionsFor(fetch, click, movie);
+    final results = await checkMovie(
+        fetch: fetch, config: cfg, movie: movie, versions: versions);
     final open = results.where((r) => r.outcome == Outcome.open).toList();
     anyBlocked |= results.any((r) => r.outcome == Outcome.blocked);
 
     // Selected theaters that now have shows, with their dates.
-    final theaterDates = <String, List<DateTime>>{};
+    final theaterDates = <String, Set<DateTime>>{};
     final theaterNames = <String, String>{};
+    final theaterVersions = <String, Set<String>>{};
     for (final r in open) {
       for (final t in r.matchedTheaters) {
-        theaterDates.putIfAbsent(t.id, () => []).add(r.date);
+        theaterDates.putIfAbsent(t.id, () => {}).add(r.date);
         theaterNames[t.id] = t.name;
+        if (r.label.isNotEmpty) {
+          theaterVersions.putIfAbsent(t.id, () => {}).add(r.label);
+        }
       }
     }
     final freshTheaters = theaterDates.keys
-        .where((id) => !alerted.contains('${movie.eventCode}|$id'))
+        .where((id) => !alerted.contains('${movie.id}|$id'))
         .toList();
 
     if (freshTheaters.isNotEmpty) {
-      final parts = freshTheaters.map((id) =>
-          '${theaterNames[id]} (${theaterDates[id]!.map(shortDate).join(', ')})');
+      final parts = freshTheaters.map((id) {
+        final v = theaterVersions[id];
+        return '${theaterNames[id]} (${theaterDates[id]!.map(shortDate).join(', ')}'
+            '${v == null ? '' : ' · ${v.join(', ')}'})';
+      });
+      // Open the page of the first newly opened theater.
+      final first = open.firstWhere(
+          (r) => r.matchedTheaters.any((t) => t.id == freshTheaters.first),
+          orElse: () => open.first);
       await showTicketsOpenAlarm(
-        title: '🎟️ ${movie.title}: BOOKING OPEN!',
+        title: '🎟️ ${movie.title} (${movie.city}): BOOKING OPEN!',
         body: 'Open now at ${parts.join('; ')}. Tap to open BookMyShow.',
-        url: open.first.url,
+        url: first.url,
       );
-      newKeys.addAll(freshTheaters.map((id) => '${movie.eventCode}|$id'));
+      newKeys.addAll(freshTheaters.map((id) => '${movie.id}|$id'));
     } else if (open.isNotEmpty &&
         watchAll &&
-        !alerted.contains('${movie.eventCode}|*')) {
+        !alerted.contains('${movie.id}|*')) {
       await showTicketsOpenAlarm(
-        title: '🎟️ ${movie.title}: booking opened in ${cfg.city}',
-        body: 'Shows are listed for ${open.map((r) => shortDate(r.date)).join(', ')}'
+        title: '🎟️ ${movie.title}: booking opened (${movie.city})',
+        body: 'Shows are listed for ${open.map((r) => shortDate(r.date)).toSet().join(', ')}'
+            '${open.first.label.isEmpty ? '' : ' (${open.map((r) => r.label).where((l) => l.isNotEmpty).toSet().join(', ')})'}'
             '${cfg.selectedTheaters.isEmpty ? '' : ' (your selected theaters not seen yet – still watching them)'}.'
             ' Tap to open BookMyShow.',
         url: open.first.url,
       );
-      newKeys.add('${movie.eventCode}|*');
+      newKeys.add('${movie.id}|*');
     }
 
     anyOpen |= open.isNotEmpty;
-    final summary = results.map((r) {
-      switch (r.outcome) {
-        case Outcome.open:
-          return '${shortDate(r.date)}: OPEN'
-              '${r.matchedTheaters.isEmpty ? '' : ' @ ${r.matchedTheaters.map((t) => t.name).join(', ')}'}';
-        case Outcome.notOpen:
-          return '${shortDate(r.date)}: not yet';
-        case Outcome.blocked:
-          return '${shortDate(r.date)}: blocked';
-        case Outcome.error:
-          return '${shortDate(r.date)}: error';
-      }
-    }).join(' · ');
-    lines.add('${movie.title} – $summary');
+    final summary = summarize(results, movie.dates);
+    final vCount = versions.length > 1 ? ' (${versions.length} versions)' : '';
+    lines.add('${movie.title} [${movie.city}]$vCount – $summary');
   }
 
   if (newKeys.isNotEmpty) await Storage.addAlertedKeys(newKeys);
 
+  final took = DateTime.now().difference(now).inSeconds;
   await Storage.saveStatus({
     'time': now.millisecondsSinceEpoch,
+    'took': took,
     'lines': lines,
     'open': anyOpen,
     'blocked': anyBlocked,
@@ -201,6 +243,6 @@ Future<void> runOneCycle(
         : anyBlocked
             ? 'BMS Tracker – BookMyShow blocking, retrying'
             : 'BMS Tracker – watching',
-    'Checked ${_hm(now)} · ${lines.join(' | ')}',
+    'Checked ${_hm(now)} (took ${took}s) · ${lines.join(' | ')}',
   );
 }
