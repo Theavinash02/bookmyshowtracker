@@ -200,6 +200,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ));
         for (final r in res) {
           final label = switch (r.outcome) {
+            Outcome.open when !isOpenForUser(r, c.selectedTheaters) =>
+              'Not at your theaters yet',
             Outcome.open => 'OPEN',
             Outcome.notOpen => 'Not open yet',
             Outcome.blocked => 'BLOCKED',

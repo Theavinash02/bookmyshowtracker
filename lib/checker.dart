@@ -444,6 +444,11 @@ Future<FetchedPage> fetchPage(http.Client client, String url) async {
   throw Exception('Too many redirects');
 }
 
+/// True if [r] counts as open for the user: shows at one of the selected
+/// theaters, or at any theater when none is selected.
+bool isOpenForUser(DateCheck r, List<Theater> selected) =>
+    r.outcome == Outcome.open && (selected.isEmpty || r.matchedTheaters.isNotEmpty);
+
 /// Loads a page and reports its final URL (after redirects).
 typedef PageFetch = Future<FetchedPage> Function(String url);
 
