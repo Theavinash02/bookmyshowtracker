@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart' show Size;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 
@@ -21,6 +22,9 @@ class WebFetcher {
     if (_ctrl != null) return _ctrl!;
     final created = Completer<InAppWebViewController>();
     _view = HeadlessInAppWebView(
+      // A tall "screen" so lazily-rendered theater lists render fully
+      // (pixels; a hidden WebView otherwise has a tiny viewport).
+      initialSize: const Size(1080, 12000),
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
         domStorageEnabled: true,
@@ -73,6 +77,11 @@ class WebFetcher {
     final deadline = DateTime.now().add(const Duration(seconds: 30));
     while (true) {
       await Future<void>.delayed(const Duration(milliseconds: 2500));
+      // Scroll to the bottom to trigger lazy loading of more theaters.
+      try {
+        await c.evaluateJavascript(
+            source: 'window.scrollTo(0, document.body ? document.body.scrollHeight : 0);');
+      } catch (_) {}
       html = await _dom(c);
       final challenge = looksLikeChallenge(html);
       if (!challenge && html.length == last) break;

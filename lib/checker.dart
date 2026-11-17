@@ -217,17 +217,26 @@ DateCheck analyzePage({
         outcome: Outcome.notOpen,
         detail: 'Show-times page has no show times yet.');
   }
+  // BookMyShow sends you to another date (often today) when the requested
+  // date has no shows yet: that is NOT open for the requested date.
+  final landedDate = RegExp(r'/(\d{8})(?:[/?#]|$)').firstMatch(finalUrl)?.group(1);
+  if (landedDate != null && landedDate != formatBmsDate(date)) {
+    return DateCheck(
+        date: date,
+        url: requestedUrl,
+        outcome: Outcome.notOpen,
+        detail: 'No shows for this date yet (BookMyShow showed $landedDate instead).');
+  }
   final body = normalize(page.body);
   final matched = theaters.where((t) => keywordMatches(body, t.keyword)).toList();
-  final redirectedDate = !finalUrl.contains(formatBmsDate(date));
+  final missing = theaters.where((t) => !matched.contains(t)).map((t) => t.name);
   return DateCheck(
     date: date,
     url: finalUrl,
     outcome: Outcome.open,
     matchedTheaters: matched,
-    detail: redirectedDate
-        ? 'Shows found (BookMyShow showed a different date: $finalUrl).'
-        : 'Shows found.',
+    detail: 'Shows found.'
+        '${missing.isEmpty ? '' : ' Not on page yet: ${missing.join(', ')}.'}',
   );
 }
 
@@ -305,7 +314,7 @@ List<String> extractVenueNames(String html) {
     }
     names.add(name.trim());
   }
-  if (names.isEmpty) names.addAll(_venueNamesFromText(html));
+  names.addAll(_venueNamesFromText(html));
   final list = names.toList()..sort();
   return list;
 }
@@ -325,7 +334,7 @@ List<String> _venueNamesFromText(String html) {
     final l = lines[j];
     if (l.length < 6 || l.length > 120 || _showTimeRe.hasMatch(l)) continue;
     if (!l.contains(':') || l.contains('<')) continue;
-    final ahead = lines.skip(j + 1).take(5);
+    final ahead = lines.skip(j + 1).take(8);
     if (ahead.any((x) => _showTimeRe.hasMatch(x))) out.add(l);
   }
   return out.toList();
