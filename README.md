@@ -15,8 +15,12 @@ which checks every 15 minutes and only looks at the whole city. This app adds:
 
 ## Install
 
-1. Open the **Releases** page of this repository (tag `latest`) on your phone. Or go to **Actions → Build APK → latest run → Artifacts**.
-2. Download `bms-tracker.apk` and install it. When Android asks, allow "Install unknown apps" for your browser.
+1. On your phone, open this link. It always downloads the newest APK:
+   <https://github.com/Theavinash02/bookmyshowtracker/releases/latest/download/bms-tracker.apk>
+   You can also browse all builds on the **Releases** page; the newest is marked **Latest**.
+2. Install the downloaded `bms-tracker.apk`. When Android asks, allow "Install unknown apps" for your browser.
+
+Every merge to `main` publishes a new release named `v<version>-build<N>`.
 
 ## Set up (takes 2 minutes, do it today)
 
