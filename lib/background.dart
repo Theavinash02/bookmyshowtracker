@@ -142,29 +142,29 @@ Future<void> runOneCycle(
       }
     }
     final freshTheaters = theaterDates.keys
-        .where((id) => !alerted.contains('${movie.eventCode}|$id'))
+        .where((id) => !alerted.contains('${movie.id}|$id'))
         .toList();
 
     if (freshTheaters.isNotEmpty) {
       final parts = freshTheaters.map((id) =>
           '${theaterNames[id]} (${theaterDates[id]!.map(shortDate).join(', ')})');
       await showTicketsOpenAlarm(
-        title: '🎟️ ${movie.title}: BOOKING OPEN!',
+        title: '🎟️ ${movie.title} (${movie.city}): BOOKING OPEN!',
         body: 'Open now at ${parts.join('; ')}. Tap to open BookMyShow.',
         url: open.first.url,
       );
-      newKeys.addAll(freshTheaters.map((id) => '${movie.eventCode}|$id'));
+      newKeys.addAll(freshTheaters.map((id) => '${movie.id}|$id'));
     } else if (open.isNotEmpty &&
         watchAll &&
-        !alerted.contains('${movie.eventCode}|*')) {
+        !alerted.contains('${movie.id}|*')) {
       await showTicketsOpenAlarm(
-        title: '🎟️ ${movie.title}: booking opened in ${cfg.city}',
+        title: '🎟️ ${movie.title}: booking opened (${movie.city})',
         body: 'Shows are listed for ${open.map((r) => shortDate(r.date)).join(', ')}'
             '${cfg.selectedTheaters.isEmpty ? '' : ' (your selected theaters not seen yet – still watching them)'}.'
             ' Tap to open BookMyShow.',
         url: open.first.url,
       );
-      newKeys.add('${movie.eventCode}|*');
+      newKeys.add('${movie.id}|*');
     }
 
     anyOpen |= open.isNotEmpty;
@@ -181,7 +181,7 @@ Future<void> runOneCycle(
           return '${shortDate(r.date)}: error';
       }
     }).join(' · ');
-    lines.add('${movie.title} – $summary');
+    lines.add('${movie.title} [${movie.city}] – $summary');
   }
 
   if (newKeys.isNotEmpty) await Storage.addAlertedKeys(newKeys);

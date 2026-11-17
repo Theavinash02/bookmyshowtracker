@@ -146,7 +146,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final res = await checkMovie(fetch: loader.load, config: c, movie: m);
         report.add(Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Text(m.title,
+          child: Text('${m.title} · ${m.city}',
               style: const TextStyle(fontWeight: FontWeight.bold)),
         ));
         for (final r in res) {
@@ -194,8 +194,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context: context, builder: (_) => MovieDialog(city: cfg!.city));
     if (m == null) return;
     final c = cfg!;
+    final existed = c.movies.any((x) => x.id == m.id);
     final list = [...c.movies.where((x) => x.id != m.id), m];
     await _save(c.copyWith(movies: list));
+    if (existed) _snack('${m.title} in ${m.city} was already added – updated it.');
   }
 
   Future<void> _editMovie(Movie m) async {
@@ -266,9 +268,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           url: link,
           eventCode: parsed.eventCode,
           slug: parsed.slug,
+          city: parsed.city ?? cfg!.city,
           startDate: today);
       for (var i = 0; i < 3; i++) {
-        candidates.add(buildShowtimesUrl(cfg!.showtimesTemplate, cfg!.city, m,
+        candidates.add(buildShowtimesUrl(cfg!.showtimesTemplate, m,
             DateTime(today.year, today.month, today.day + i)));
       }
     }
@@ -425,7 +428,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Card(
                 child: ListTile(
                   title: Text(m.title),
-                  subtitle: Text('${m.eventCode} · ${m.dates.map(shortDate).join(', ')}'),
+                  subtitle: Text('${m.city} · ${m.eventCode} · ${m.dates.map(shortDate).join(', ')}'),
                   onTap: () => _editMovie(m),
                   leading: IconButton(
                     icon: const Icon(Icons.delete_outline),
@@ -513,24 +516,27 @@ class _MovieDialogState extends State<MovieDialog> {
   late final title = TextEditingController(text: widget.existing?.title ?? '');
   late DateTime start = widget.existing?.startDate ?? _defaultStart();
   late int days = widget.existing?.days ?? 3;
+  late final city = TextEditingController(text: widget.existing?.city ?? widget.city);
   String? error;
 
   static DateTime _defaultStart() {
-    // Avengers: Doomsday India release (18 Dec 2026). Editable.
-    final release = DateTime(2026, 12, 18);
+    // Avengers: Doomsday India release (17 Dec 2026, per BookMyShow). Editable.
+    final release = DateTime(2026, 12, 17);
     final today = DateTime.now();
     final t = DateTime(today.year, today.month, today.day);
     return release.isBefore(t) ? t : release;
   }
 
   void _urlChanged(String v) {
-    final p = parseMovieUrl(v, city: widget.city);
+    final p = parseMovieUrl(v, city: city.text.trim());
     if (p != null && title.text.trim().isEmpty) title.text = p.suggestedTitle;
+    if (p?.city != null) city.text = p!.city!;
     setState(() => error = null);
   }
 
   void _submit() {
-    final p = parseMovieUrl(url.text, city: widget.city);
+    final p = parseMovieUrl(url.text, city: city.text.trim());
+    final c = city.text.trim().toLowerCase();
     if (p == null) {
       setState(() => error =
           'Link must contain the movie code (ET00…). Copy it from the movie page on BookMyShow.');
@@ -543,6 +549,7 @@ class _MovieDialogState extends State<MovieDialog> {
         url: p.url,
         eventCode: p.eventCode,
         slug: p.slug,
+        city: c.isEmpty ? (p.city ?? widget.city) : c,
         startDate: start,
         days: days,
         enabled: widget.existing?.enabled ?? true,
@@ -578,6 +585,14 @@ class _MovieDialogState extends State<MovieDialog> {
           TextField(
               controller: title,
               decoration: const InputDecoration(labelText: 'Title')),
+          TextField(
+              controller: city,
+              decoration: const InputDecoration(
+                  labelText: 'BookMyShow city',
+                  helperText:
+                      'Filled from the link. Add the same movie again with another '
+                      'city (e.g. trichy and tiruchirappalli) to watch both.',
+                  helperMaxLines: 3)),
           const SizedBox(height: 12),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -740,8 +755,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
           TextField(
               controller: city,
               decoration: const InputDecoration(
-                  labelText: 'BookMyShow city',
-                  helperText: 'As in the link: in.bookmyshow.com/movies/<city>/… (Trichy = trichy)',
+                  labelText: 'Default BookMyShow city',
+                  helperText: 'Used when a movie link has no city. Each movie keeps the city from its own link.',
                   helperMaxLines: 2)),
           TextField(
               controller: template,

@@ -14,9 +14,14 @@ class Movie {
     required this.eventCode,
     required this.slug,
     required this.startDate,
+    required this.city,
     this.days = 3,
     this.enabled = true,
   });
+
+  /// BookMyShow city slug this movie is checked in, e.g. "trichy". Taken
+  /// from the pasted link, so the same movie can be tracked in two cities.
+  final String city;
 
   /// Display title, e.g. "Avengers: Doomsday".
   final String title;
@@ -38,7 +43,8 @@ class Movie {
 
   final bool enabled;
 
-  String get id => eventCode;
+  /// Unique per movie *and* city.
+  String get id => '$eventCode@$city';
 
   List<DateTime> get dates => List.generate(
         days,
@@ -50,6 +56,7 @@ class Movie {
     DateTime? startDate,
     int? days,
     bool? enabled,
+    String? city,
   }) =>
       Movie(
         title: title ?? this.title,
@@ -57,6 +64,7 @@ class Movie {
         eventCode: eventCode,
         slug: slug,
         startDate: startDate ?? this.startDate,
+        city: city ?? this.city,
         days: days ?? this.days,
         enabled: enabled ?? this.enabled,
       );
@@ -67,11 +75,14 @@ class Movie {
         'eventCode': eventCode,
         'slug': slug,
         'startDate': startDate.millisecondsSinceEpoch,
+        'city': city,
         'days': days,
         'enabled': enabled,
       };
 
-  factory Movie.fromMap(Map<String, dynamic> m) => Movie(
+  /// [fallbackCity] is used for movies saved before cities were per movie.
+  factory Movie.fromMap(Map<String, dynamic> m, {String fallbackCity = defaultCity}) => Movie(
+        city: (m['city'] as String?) ?? fallbackCity,
         title: m['title'] as String,
         url: m['url'] as String,
         eventCode: m['eventCode'] as String,
@@ -168,10 +179,11 @@ class TrackerConfig {
 
   factory TrackerConfig.fromJson(String s) {
     final m = jsonDecode(s) as Map<String, dynamic>;
+    final city = (m['city'] as String?) ?? defaultCity;
     return TrackerConfig(
-      city: (m['city'] as String?) ?? defaultCity,
+      city: city,
       movies: ((m['movies'] as List?) ?? [])
-          .map((e) => Movie.fromMap(e as Map<String, dynamic>))
+          .map((e) => Movie.fromMap(e as Map<String, dynamic>, fallbackCity: city))
           .toList(),
       theaters: ((m['theaters'] as List?) ?? [])
           .map((e) => Theater.fromMap(e as Map<String, dynamic>))

@@ -50,7 +50,12 @@ BookMyShow has two separate cities for Trichy. The website's
 **Tiruchirappalli** city lists only a few cinemas. **Trichy**, which is the city
 the BookMyShow app uses, lists them all (LA Cinema Thiruverumbur, Maris,
 Sona Mina, Star…). The tracker uses `trichy` by default. You can change it in
-**Settings → BookMyShow city**: use the word after `/movies/` in a BookMyShow link.
+the **city** field when adding a movie. It is filled from the link (the word after `/movies/`).
+
+**Tracking one movie in both cities.** Add the same movie twice, once with each
+link, for example `…/movies/trichy/avengers-doomsday-english/ET00439706` and
+`…/movies/tiruchirappalli/avengers-doomsday-english/ET00439706`. Each entry is
+checked and alarmed separately.
 
 ## Keep it alive
 

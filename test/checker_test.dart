@@ -7,6 +7,7 @@ Movie movie() => Movie(
       url: 'x',
       eventCode: 'ET00123456',
       slug: 'avengers-doomsday',
+      city: 'tiruchirappalli',
       startDate: DateTime(2026, 12, 18),
       days: 3,
     );
@@ -61,10 +62,32 @@ void main() {
     });
   });
 
+  group('per-movie city', () {
+    test('city is read from the link', () {
+      expect(parseMovieUrl('https://in.bookmyshow.com/movies/trichy/avengers-doomsday-english/ET00439706')!.city, 'trichy');
+      expect(parseMovieUrl('https://in.bookmyshow.com/movies/tiruchirappalli/avengers-doomsday-english/ET00439706')!.city, 'tiruchirappalli');
+      expect(parseMovieUrl('https://in.bookmyshow.com/trichy/movies/x/ET00439706')!.city, 'trichy');
+      expect(parseMovieUrl('https://in.bookmyshow.com/buytickets/x-trichy/movie-tric-ET00439706-MT/20261217')!.city, isNull);
+    });
+    test('same movie in two cities = two entries with their own URLs', () {
+      final a = movie().copyWith(city: 'trichy');
+      final b = movie().copyWith(city: 'tiruchirappalli');
+      expect(a.id == b.id, isFalse);
+      expect(buildShowtimesUrl(defaultShowtimesTemplate, a, DateTime(2026, 12, 17)),
+          contains('/movies/trichy/'));
+      expect(buildShowtimesUrl(defaultShowtimesTemplate, b, DateTime(2026, 12, 17)),
+          contains('/movies/tiruchirappalli/'));
+    });
+    test('old saved movies get the global city', () {
+      final json = '{"city":"trichy","movies":[{"title":"t","url":"u","eventCode":"ET1","slug":"s","startDate":0}],"theaters":[]}';
+      expect(TrackerConfig.fromJson(json).movies.single.city, 'trichy');
+    });
+  });
+
   test('buildShowtimesUrl', () {
     expect(
-        buildShowtimesUrl(defaultShowtimesTemplate, 'tiruchirappalli', movie(),
-            DateTime(2026, 12, 18)),
+        buildShowtimesUrl(
+            defaultShowtimesTemplate, movie(), DateTime(2026, 12, 18)),
         showUrl);
   });
 
@@ -142,6 +165,7 @@ void main() {
         city: 'tiruchirappalli', movies: [movie()], theaters: theaters);
     final c2 = TrackerConfig.fromJson(c.toJson());
     expect(c2.movies.single.eventCode, 'ET00123456');
+    expect(c2.movies.single.city, 'tiruchirappalli');
     expect(c2.movies.single.dates.last, DateTime(2026, 12, 20));
     expect(c2.selectedTheaters.length, 3);
     expect(c2.showtimesTemplate, defaultShowtimesTemplate);

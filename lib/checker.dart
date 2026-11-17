@@ -20,10 +20,13 @@ final _showTimeRe = RegExp(r'\b\d{1,2}:\d{2}\s?[AP]\.?M\b', caseSensitive: false
 
 /// Result of parsing a BookMyShow movie link.
 class ParsedMovieUrl {
-  ParsedMovieUrl(this.url, this.eventCode, this.slug);
+  ParsedMovieUrl(this.url, this.eventCode, this.slug, [this.city]);
   final String url;
   final String eventCode;
   final String slug;
+
+  /// City slug from the link ("trichy" in /movies/trichy/...), if present.
+  final String? city;
 
   String get suggestedTitle => slug
       .split('-')
@@ -60,8 +63,16 @@ ParsedMovieUrl? parseMovieUrl(String input, {String city = ''}) {
         slug.endsWith('-${city.toLowerCase()}')) {
       slug = slug.substring(0, slug.length - city.length - 1);
     }
-    return ParsedMovieUrl(url, event, slug);
+    return ParsedMovieUrl(url, event, slug, _cityFromSegments(segs));
   }
+  return null;
+}
+
+/// `/movies/CITY/...` (current) or `/CITY/movies/...` (older links).
+String? _cityFromSegments(List<String> segs) {
+  final i = segs.indexWhere((s) => s.toLowerCase() == 'movies');
+  if (i == 0 && segs.length > 2) return segs[1].toLowerCase();
+  if (i == 1) return segs[0].toLowerCase();
   return null;
 }
 
@@ -70,9 +81,9 @@ String formatBmsDate(DateTime d) =>
     '${d.month.toString().padLeft(2, '0')}'
     '${d.day.toString().padLeft(2, '0')}';
 
-String buildShowtimesUrl(String template, String city, Movie movie, DateTime date) =>
+String buildShowtimesUrl(String template, Movie movie, DateTime date) =>
     template
-        .replaceAll('{city}', city)
+        .replaceAll('{city}', movie.city)
         .replaceAll('{slug}', movie.slug)
         .replaceAll('{event}', movie.eventCode)
         .replaceAll('{date}', formatBmsDate(date));
@@ -280,7 +291,7 @@ Future<List<DateCheck>> checkMovie({
   final results = <DateCheck>[];
   for (final date in movie.dates) {
     final url = buildShowtimesUrl(
-        config.showtimesTemplate, config.city, movie, date);
+        config.showtimesTemplate, movie, date);
     try {
       final page = await fetch(url);
       results.add(analyzePage(
