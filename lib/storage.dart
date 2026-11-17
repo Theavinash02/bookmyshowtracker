@@ -26,7 +26,7 @@ class Storage {
   }
 
   static const _kDefaultsVersion = 'defaults_version';
-  static const _defaultsVersion = 2;
+  static const _defaultsVersion = 3;
 
   /// Adds theaters introduced in app updates (once, so deletions stick).
   static Future<TrackerConfig> _addNewDefaultTheaters(TrackerConfig c) async {
