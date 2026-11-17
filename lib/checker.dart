@@ -76,6 +76,18 @@ String? _cityFromSegments(List<String> segs) {
   return null;
 }
 
+const _monthNames = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+/// "20261217" -> "17 Dec".
+String _bmsDateText(String yyyymmdd) {
+  final m = int.tryParse(yyyymmdd.substring(4, 6)) ?? 0;
+  final d = int.tryParse(yyyymmdd.substring(6)) ?? 0;
+  return m >= 1 && m <= 12 ? '$d ${_monthNames[m - 1]}' : yyyymmdd;
+}
+
 String formatBmsDate(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}'
     '${d.month.toString().padLeft(2, '0')}'
@@ -165,7 +177,9 @@ String describePage(FetchedPage p) {
               ?.group(1)
               ?.trim() ??
           '';
-  return 'HTTP ${p.status} · ${p.body.length} chars · $times show times\n'
+  final dataPieces = p.body.split(_dataMarker).length - 1;
+  return 'HTTP ${p.status} · ${p.body.length} chars · $times show times · '
+      '$dataPieces data pieces\n'
       'Page title: $title\n'
       'Landed on: ${p.finalUrl}\n'
       'Cinemas seen (${venues.length}): '
@@ -182,10 +196,41 @@ String visibleListText(String body) {
   final i = body.indexOf(marker);
   if (i < 0) return body;
   var text = body.substring(i + marker.length);
+  final data = text.indexOf(_dataMarker);
+  if (data >= 0) text = text.substring(0, data);
   final end = text.toLowerCase().indexOf('unable to find what you are looking for');
   if (end > 0) text = text.substring(0, end);
   return text;
 }
+
+const _dataMarker = '\n<!--DATA-->\n';
+
+/// Show-time data the page downloaded or embedded, limited to pieces that
+/// mention [eventCode] (so other movies' data and site-wide lists are
+/// ignored). Independent of whether the page was drawn on a screen.
+String pageDataText(String body, String eventCode) {
+  final code = eventCode.toUpperCase();
+  final parts = <String>[];
+  final i = body.indexOf(_dataMarker);
+  if (i >= 0) {
+    parts.addAll(body.substring(i).split(_dataMarker).where((p) => p.isNotEmpty));
+  }
+  final textAt = body.indexOf('<!--TEXT-->');
+  final html = textAt >= 0 ? body.substring(0, textAt) : body;
+  for (final m in RegExp(r'<script[^>]*>([\s\S]*?)</script>', caseSensitive: false)
+      .allMatches(html)) {
+    parts.add(m.group(1)!);
+  }
+  return parts.where((p) => p.toUpperCase().contains(code)).join('\n');
+}
+
+final _sessionKeyRe = RegExp(
+    r'"(?:show_?time|showDateTime|show_date_time|session_?id|sessionCode)"',
+    caseSensitive: false);
+
+/// True if downloaded data lists shows (session ids / show times).
+bool _dataHasShows(String data) =>
+    data.isNotEmpty && (_showTimeRe.hasMatch(data) || _sessionKeyRe.hasMatch(data));
 
 /// Human name of a show-times page's version, from its title:
 /// "Avengers: Doomsday - (Tamil) Movie Showtimes in Trichy & ..." ->
@@ -260,23 +305,41 @@ DateCheck analyzePage({
   // date has no shows yet: that is NOT open for the requested date.
   final landedDate = RegExp(r'/(\d{8})(?:[/?#]|$)').firstMatch(finalUrl)?.group(1);
   if (landedDate != null && landedDate != formatBmsDate(date)) {
+    final other = _bmsDateText(landedDate);
+    final otherHasShows = _showTimeRe.hasMatch(visibleListText(page.body)) ||
+        _dataHasShows(pageDataText(page.body, movie.eventCode));
     return DateCheck(
         date: date,
         url: requestedUrl,
         outcome: Outcome.notOpen,
-        detail: 'No shows for this date yet: BookMyShow showed '
-            '${landedDate.substring(6)}/${landedDate.substring(4, 6)} instead.');
+        detail: otherHasShows
+            ? '⚠ Not on your date, but BookMyShow HAS shows on $other. '
+                'To watch $other, edit this movie and change its date.'
+            : 'No shows for this date yet: BookMyShow showed $other instead.');
   }
+  // 1. The theater list as drawn on screen (most precise).
+  // 2. Otherwise the show-time data the page downloaded: the background
+  //    tracker's hidden browser has no screen, so the list is never drawn
+  //    there, but the data is the same.
   final visible = visibleListText(page.body);
-  final hasShowTimes = _showTimeRe.hasMatch(visible);
-  if (!hasShowTimes) {
-    return DateCheck(
-        date: date,
-        url: requestedUrl,
-        outcome: Outcome.notOpen,
-        detail: 'Show-times page has no show times yet.');
+  final String source;
+  final String listText;
+  if (_showTimeRe.hasMatch(visible)) {
+    source = 'screen';
+    listText = visible;
+  } else {
+    final data = pageDataText(page.body, movie.eventCode);
+    if (!_dataHasShows(data)) {
+      return DateCheck(
+          date: date,
+          url: requestedUrl,
+          outcome: Outcome.notOpen,
+          detail: 'Show-times page has no show times yet.');
+    }
+    source = 'page data';
+    listText = data;
   }
-  final body = normalize(visible);
+  final body = normalize(listText);
   final matched = theaters.where((t) => keywordMatches(body, t.keyword)).toList();
   final missing = theaters.where((t) => !matched.contains(t)).map((t) => t.name);
   return DateCheck(
@@ -284,7 +347,7 @@ DateCheck analyzePage({
     url: finalUrl,
     outcome: Outcome.open,
     matchedTheaters: matched,
-    detail: 'Shows found.'
+    detail: 'Shows found (from $source).'
         '${missing.isEmpty ? '' : ' Not on page yet: ${missing.join(', ')}.'}',
   );
 }

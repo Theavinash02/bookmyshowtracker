@@ -159,11 +159,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final report = <Widget>[];
     final started = DateTime.now();
     final alerted = await Storage.alertedKeys();
+    final ringing = <String>[];
     try {
       for (final m in movies) {
         final versions = await discoverVersions(loader.load, m, click: loader.click);
         final res = await checkMovie(
             fetch: loader.load, config: c, movie: m, versions: versions);
+        // Ring for selected theaters that haven't rung yet (shared memory
+        // with the background tracker, so nothing rings twice).
+        final fresh = <String, Theater>{};
+        final dates = <String, Set<DateTime>>{};
+        String? url;
+        for (final r in res.where((r) => r.outcome == Outcome.open)) {
+          for (final t in r.matchedTheaters) {
+            final key = '${m.id}|${t.id}';
+            if (alerted.contains(key)) continue;
+            fresh[key] = t;
+            dates.putIfAbsent(key, () => {}).add(r.date);
+            url ??= r.url;
+          }
+        }
+        if (fresh.isNotEmpty) {
+          final parts = fresh.entries.map((e) =>
+              '${e.value.name} (${dates[e.key]!.map(shortDate).join(', ')})');
+          await showTicketsOpenAlarm(
+            title: '🎟️ ${m.title} (${m.city}): BOOKING OPEN!',
+            body: 'Open now at ${parts.join('; ')}. Tap to open BookMyShow.',
+            url: url!,
+          );
+          await Storage.addAlertedKeys(fresh.keys);
+          await Storage.logAlarm('${m.title} (${m.city}): ${parts.join('; ')} [Check now]');
+          ringing.addAll(fresh.values.map((t) => t.name));
+        }
         report.add(Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Text(
@@ -182,7 +209,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             dense: true,
             contentPadding: EdgeInsets.zero,
             title: Text('${r.label.isNotEmpty ? '${r.label} · ' : r.version.isEmpty ? '' : '${r.version} · '}${shortDate(r.date)} – $label'
-                '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => '${t.name} (${alerted.contains('${m.id}|${t.id}') ? 'alarm already rang' : running ? 'alarm rings at next background check' : 'alarm needs tracking ON'})').join(', ')}'}'),
+                '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => '${t.name} (${alerted.contains('${m.id}|${t.id}') ? 'alarm already rang earlier' : 'alarm ringing now'})').join(', ')}'}'),
             subtitle: SelectableText('${r.detail}\n${r.debug}'),
             onTap: () => openBookMyShow(r.url),
           ));
@@ -204,10 +231,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                      'This test never rings. The background tracker rings once per '
-                      'theater per movie (Settings → Reset alerts to ring again).',
-                      style: TextStyle(fontStyle: FontStyle.italic)),
+                  Text(
+                      ringing.isEmpty
+                          ? 'Each theater rings once per movie (Settings → Reset alerts '
+                              'to ring again).'
+                          : '🔔 Alarm rang for: ${ringing.join(', ')}',
+                      style: const TextStyle(fontStyle: FontStyle.italic)),
                   ...report,
                 ])),
         actions: [
@@ -448,6 +477,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             : const Icon(Icons.search),
                         label: const Text('Check now'),
                       ),
+                      if (st?['report'] != null)
+                        OutlinedButton.icon(
+                          onPressed: () => showDialog<void>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Last background check'),
+                              content: SingleChildScrollView(
+                                child: SelectableText(
+                                    'This is what the tracker that rings the alarm saw.\n\n'
+                                    '${(st!['report'] as List).join('\n\n')}'),
+                              ),
+                              actions: [
+                                TextButton(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text('OK'))
+                              ],
+                            ),
+                          ),
+                          icon: const Icon(Icons.history),
+                          label: const Text('Background report'),
+                        ),
                       OutlinedButton.icon(
                         onPressed: () async {
                           await _askPermissions();

@@ -252,7 +252,12 @@ void main() {
           'Sona Mina 10:30 AM');
       expect(r.outcome, Outcome.notOpen);
       final empty = run(200, showUrl.replaceAll('20261218', '20261117'), 'nothing');
-      expect(empty.detail, contains('showed 17/11 instead'));
+      expect(empty.detail, contains('showed 17 Nov instead'));
+      // Shows exist, just on another date: say so plainly.
+      final other = run(200, showUrl.replaceAll('20261218', '20261217'),
+          '<html></html>\n<!--TEXT-->\nMegastar Cinemas\n08:00 AM');
+      expect(other.outcome, Outcome.notOpen);
+      expect(other.detail, contains('HAS shows on 17 Dec'));
     });
     test('showtimes page without times = not open', () {
       final r = run(200, showUrl, 'Sona Mina, no shows available');
@@ -326,6 +331,63 @@ void main() {
 
     test('pages without rendered text (HTTP fallback) are used whole', () {
       expect(visibleListText('Megastar 08:00 AM'), 'Megastar 08:00 AM');
+    });
+  });
+
+  group('background: list not drawn, read downloaded data', () {
+    const url =
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217';
+    final m = Movie(
+        title: 't', url: url, eventCode: 'ET00526312', slug: 'avengers-doomsday',
+        city: 'trichy', startDate: DateTime(2026, 12, 17));
+    final mega = Theater(name: 'Megastar Cinemas', keyword: 'Megastar', selected: true);
+    final thiru = Theater(name: 'LA Cinema: Thiruverumbur', keyword: 'Thiruverumbur', selected: true);
+
+    DateCheck check(String body) => analyzePage(
+        page: FetchedPage(200, Uri.parse(url), body),
+        movie: m,
+        date: DateTime(2026, 12, 17),
+        requestedUrl: url,
+        theaters: [mega, thiru]);
+
+    // What the hidden browser returns with no screen: page text has no list,
+    // but the captured show-time data has it.
+    const undrawn = '<html><title>Avengers: Doomsday Movie Showtimes in Trichy</title></html>'
+        '\n<!--TEXT-->\nAvengers: Doomsday\nUnable to find what you are looking for?'
+        '\n<!--DATA-->\n{"eventCode":"ET00526312","venues":[{"venueName":"Megastar Cinemas: Premium Large Format ATMOS LASER","shows":[{"sessionId":"123","showTime":"08:00 AM"}]}]}';
+
+    test('Megastar is found from data and the alarm can ring', () {
+      final r = check(undrawn);
+      expect(r.outcome, Outcome.open);
+      expect(r.matchedTheaters.map((t) => t.name), ['Megastar Cinemas']);
+      expect(r.detail, contains('from page data'));
+    });
+
+    test('data about another movie is ignored', () {
+      const other = '<html></html>\n<!--TEXT-->\nnothing'
+          '\n<!--DATA-->\n{"eventCode":"ET00999999","venueName":"Megastar","showTime":"08:00 AM"}';
+      expect(check(other).outcome, Outcome.notOpen);
+    });
+
+    test('data without shows = not open', () {
+      const none = '<html></html>\n<!--TEXT-->\nnothing'
+          '\n<!--DATA-->\n{"eventCode":"ET00526312","venues":[]}';
+      expect(check(none).outcome, Outcome.notOpen);
+    });
+
+    test('embedded page data (script tags) also counts', () {
+      const embedded = '<html><script id="__NEXT_DATA__">{"eventCode":"ET00526312",'
+          '"venueName":"Megastar Cinemas","sessionId":"1"}</script></html>\n<!--TEXT-->\nloading';
+      expect(check(embedded).matchedTheaters.single.name, 'Megastar Cinemas');
+    });
+
+    test('drawn list is preferred when present', () {
+      const drawn = '<html></html>\n<!--TEXT-->\nMegastar Cinemas\n08:00 AM\n'
+          'Unable to find what you are looking for?'
+          '\n<!--DATA-->\n{"eventCode":"ET00526312","venueName":"LA Cinema: Thiruverumbur","sessionId":"9"}';
+      final r = check(drawn);
+      expect(r.matchedTheaters.map((t) => t.name), ['Megastar Cinemas']);
+      expect(r.detail, contains('from screen'));
     });
   });
 

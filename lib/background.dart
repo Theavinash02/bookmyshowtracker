@@ -151,7 +151,13 @@ String summarize(List<DateCheck> results, List<DateTime> dates) =>
       if (rs.isNotEmpty && rs.every((r) => r.outcome == Outcome.error)) {
         return '${shortDate(d)}: error';
       }
-      return '${shortDate(d)}: not yet';
+      final elsewhere = rs
+          .map((r) => RegExp(r'HAS shows on (\d+ \w+)').firstMatch(r.detail)?.group(1))
+          .whereType<String>()
+          .toSet();
+      return elsewhere.isEmpty
+          ? '${shortDate(d)}: not yet'
+          : '${shortDate(d)}: not yet (⚠ shows on ${elsewhere.join(', ')} – change the date?)';
     }).join(' · ');
 
 /// One pass over all enabled movies. Fires alarms for new openings.
@@ -168,6 +174,7 @@ Future<void> runOneCycle(
   final alerted = await Storage.alertedKeys();
   final newKeys = <String>[];
   final lines = <String>[];
+  final report = <String>[];
   var anyOpen = false;
   var anyBlocked = false;
   final watchAll = cfg.alertAnyTheater || cfg.selectedTheaters.isEmpty;
@@ -229,6 +236,19 @@ Future<void> runOneCycle(
     }
 
     anyOpen |= open.isNotEmpty;
+    report.add('▶ ${movie.title} · ${movie.city} · ${versions.length} language/format(s)');
+    for (final r in results) {
+      final o = switch (r.outcome) {
+        Outcome.open => 'OPEN',
+        Outcome.notOpen => 'not open',
+        Outcome.blocked => 'BLOCKED',
+        Outcome.error => 'ERROR',
+      };
+      final firstDebug = r.debug.split('\n').first;
+      report.add('${r.label.isNotEmpty ? r.label : r.version} · ${shortDate(r.date)} – $o'
+          '${r.matchedTheaters.isEmpty ? '' : ' @ ${r.matchedTheaters.map((t) => t.name).join(', ')}'}'
+          '\n${r.detail}${firstDebug.isEmpty ? '' : '\n$firstDebug'}');
+    }
     final summary = summarize(results, movie.dates);
     final vCount = versions.length > 1 ? ' (${versions.length} versions)' : '';
     lines.add('${movie.title} [${movie.city}]$vCount – $summary');
@@ -241,6 +261,7 @@ Future<void> runOneCycle(
     'time': now.millisecondsSinceEpoch,
     'took': took,
     'lines': lines,
+    'report': report,
     'open': anyOpen,
     'blocked': anyBlocked,
   });
