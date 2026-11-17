@@ -6,7 +6,13 @@ import 'package:url_launcher/url_launcher.dart';
 const serviceChannelId = 'tracker_service';
 
 /// Notification channel for the loud "tickets open" alarm.
-const alarmChannelId = 'tickets_open_alarm_v1';
+/// (v2: uses the phone's alarm ringtone. Channel sounds can't be changed
+/// after creation, hence a new id.)
+const alarmChannelId = 'tickets_open_alarm_v2';
+const _oldAlarmChannelIds = ['tickets_open_alarm_v1'];
+
+/// The phone's own alarm ringtone (falls back to the default sound if unset).
+const _alarmSound = UriAndroidNotificationSound('content://settings/system/alarm_alert');
 
 const serviceNotificationId = 888;
 
@@ -42,12 +48,16 @@ Future<void> initNotifications({bool handleTaps = false}) async {
     playSound: false,
     enableVibration: false,
   ));
+  for (final old in _oldAlarmChannelIds) {
+    await android?.deleteNotificationChannel(channelId: old);
+  }
   await android?.createNotificationChannel(AndroidNotificationChannel(
     alarmChannelId,
     'Tickets open ALARM',
     description: 'Loud alarm when ticket booking opens',
     importance: Importance.max,
     playSound: true,
+    sound: _alarmSound,
     enableVibration: true,
     vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
     audioAttributesUsage: AudioAttributesUsage.alarm,
@@ -73,6 +83,8 @@ Future<void> showTicketsOpenAlarm({
     category: AndroidNotificationCategory.alarm,
     fullScreenIntent: true,
     audioAttributesUsage: AudioAttributesUsage.alarm,
+    sound: _alarmSound,
+    vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
     visibility: NotificationVisibility.public,
     ticker: title,
     styleInformation: BigTextStyleInformation(body),

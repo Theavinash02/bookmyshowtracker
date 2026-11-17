@@ -9,7 +9,7 @@ which checks every 15 minutes and only looks at the whole city. This app adds:
 
 - **Theater selection.** Tick the Trichy cinemas you care about. You can also load the real list from BookMyShow or add your own.
 - **Checks every 30–300 seconds** (60 s by default). It runs as a foreground service, not Android's 15-minute WorkManager.
-- **An alarm-style alert.** It uses the alarm sound stream, so it rings even when the phone is on silent. It keeps ringing until you dismiss it and shows on the lock screen. Tap it to open BookMyShow.
+- **An alarm-style alert.** It plays your phone's alarm ringtone on the alarm sound stream, so it rings even when the phone is on silent. It keeps ringing until you dismiss it and shows on the lock screen. Tap it to open BookMyShow.
 - **A "Check now" button.** It shows exactly what the app sees for each date, so you can confirm the checker works before tickets open.
 - **Restart after reboot.** Tracking comes back on automatically after the phone restarts.
 
@@ -25,7 +25,7 @@ Every merge to `main` publishes a new release named `v<version>-build<N>`.
 ## Set up (takes 2 minutes, do it today)
 
 1. **Add the movie.** In the BookMyShow app or website, open *Avengers: Doomsday* with Trichy as the city. Tap **Share → Copy link**. In BMS Tracker, tap **+ Movie** and paste the link. It must contain the code `ET00…`.
-2. **Pick the dates.** Set the first show date (18 Dec 2026 by default) and how many days to watch (1–7).
+2. **Pick the dates.** Set the first show date (17 Dec 2026 by default, the Avengers: Doomsday release date) and how many days to watch (1–7).
 3. **Tick your theaters.** If a name in the list is wrong, use **Load from BookMyShow**: paste the "Book tickets" link of *any movie running in Trichy today* and pick theaters from the real list. You can also edit the match keyword yourself.
 4. Turn on the **switch at the top right**. Allow notifications, and allow the app to **ignore battery optimisation**. This is important.
 5. Tap **Test alarm** to hear the alert.
@@ -70,6 +70,9 @@ If a version you care about is missing from "Versions found", add its
 "Book tickets" link as a separate movie.
 
 ## Keep it alive
+
+If the app shows **"⚠ No check for a while"**, the phone has paused the tracker.
+Follow the steps below, then switch tracking off and on.
 
 - Leave the "BMS Tracker – watching" notification in place. That notification is the background service.
 - Some phones (Xiaomi/Redmi, Oppo, Vivo, Realme, OnePlus, Samsung) kill background apps. Set **Battery → BMS Tracker → No restrictions / Allow background activity**, and turn on **Autostart** if your phone has it. For more, see <https://dontkillmyapp.com>.

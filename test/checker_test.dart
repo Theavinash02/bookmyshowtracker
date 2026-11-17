@@ -175,7 +175,9 @@ void main() {
         click: (url, text) async {
           clickedUrl = url;
           expect(text, 'Book tickets');
-          return FetchedPage(200, Uri.parse(after), '<html>Avengers: Doomsday - (Tamil)</html>');
+          return ClickResult(
+              FetchedPage(200, Uri.parse(after), '<html>Avengers: Doomsday - (Tamil)</html>'),
+              clicked: true);
         },
       );
       expect(clickedUrl, 'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00439706');
@@ -186,7 +188,8 @@ void main() {
     test('no Book tickets button yet: falls back to the page, then just itself', () async {
       final v = await discoverVersions(
           (url) async => FetchedPage(200, Uri.parse(url), 'Mark interested'), eng,
-          click: (url, text) async => null);
+          click: (url, text) async =>
+              ClickResult(FetchedPage(200, Uri.parse(url), 'Mark interested'), clicked: false));
       expect(v.single.eventCode, 'ET00439706');
     });
 
@@ -194,6 +197,22 @@ void main() {
       final v = extractVersions('', eng,
           landedUrl: 'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217?etCodes=ET00526312,ET00526314,ET00526313&refEventCode=ET00526312');
       expect(v.map((e) => e.eventCode), ['ET00439706', 'ET00526312', 'ET00526314', 'ET00526313']);
+    });
+
+    test('movie page retried with the plain movie name if the link name fails', () async {
+      final tried = <String>[];
+      final v = await discoverVersions((url) async {
+        tried.add(url);
+        return url.contains('avengers-doomsday-english')
+            ? FetchedPage(404, Uri.parse(url), 'not found')
+            : FetchedPage(200, Uri.parse(url),
+                '<a href="/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217">');
+      }, eng);
+      expect(tried, [
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday-english/ET00439706',
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00439706',
+      ]);
+      expect(v.map((e) => e.eventCode), ['ET00439706', 'ET00526312']);
     });
 
     test('allVersions defaults to true, including old saved movies', () {
@@ -271,6 +290,50 @@ void main() {
       expect(keywordMatches(body, k), isTrue, reason: k);
     }
     expect(keywordMatches(normalize('Megastar Cinemas'), 'Star Cinemas'), isFalse);
+  });
+
+  group('visible theater list only', () {
+    const url =
+        'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217';
+    final m = Movie(
+        title: 't', url: url, eventCode: 'ET00526312', slug: 'avengers-doomsday',
+        city: 'trichy', startDate: DateTime(2026, 12, 17));
+    final thiru = Theater(name: 'LA Cinema: Thiruverumbur', keyword: 'Thiruverumbur', selected: true);
+    final mega = Theater(name: 'Megastar', keyword: 'Megastar', selected: true);
+
+    DateCheck check(String body) => analyzePage(
+        page: FetchedPage(200, Uri.parse(url), body),
+        movie: m,
+        date: DateTime(2026, 12, 17),
+        requestedUrl: url,
+        theaters: [thiru, mega]);
+
+    test('footer and hidden data do not count as a theater listing', () {
+      const body = '<html><script>{"venueName":"LA Cinema: Thiruverumbur"}</script></html>'
+          '\n<!--TEXT-->\nMegastar Cinemas: Premium Large Format\n08:00 AM\n'
+          'Unable to find what you are looking for?\nCinemas in Trichy: LA Cinema: Thiruverumbur';
+      final r = check(body);
+      expect(r.outcome, Outcome.open);
+      expect(r.matchedTheaters.map((t) => t.name), ['Megastar']);
+      expect(r.detail, contains('Not on page yet: LA Cinema: Thiruverumbur'));
+    });
+
+    test('show times only in the footer = not open', () {
+      const body = '<html></html>\n<!--TEXT-->\nNo shows\n'
+          'Unable to find what you are looking for?\nCustomer care 10:00 AM';
+      expect(check(body).outcome, Outcome.notOpen);
+    });
+
+    test('pages without rendered text (HTTP fallback) are used whole', () {
+      expect(visibleListText('Megastar 08:00 AM'), 'Megastar 08:00 AM');
+    });
+  });
+
+  test('versionLabel', () {
+    expect(versionLabel('<title>Avengers: Doomsday - (Tamil) Movie Showtimes in Trichy &amp; Online Ticket Booking</title>'),
+        'Avengers: Doomsday - (Tamil)');
+    expect(versionLabel('<title>Scene Showtimes</title>'), 'Scene');
+    expect(versionLabel('<html></html>'), '');
   });
 
   test('extractVenueNames', () {

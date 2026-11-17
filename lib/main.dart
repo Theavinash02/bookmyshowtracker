@@ -103,6 +103,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _snack(String msg) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg)));
 
+  /// True when the last check is much older than one interval plus the
+  /// time a check takes, i.e. the background tracker probably stopped.
+  bool _isStale(DateTime last, int? tookSeconds, TrackerConfig c) {
+    final expected = c.intervalSeconds + (tookSeconds ?? 60) + 10;
+    return DateTime.now().difference(last).inSeconds > expected * 3 + 120;
+  }
+
   // ---------------------------------------------------------------- tracking
 
   Future<void> _toggle(bool on) async {
@@ -141,6 +148,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => testing = true);
     final loader = PageLoader();
     final report = <Widget>[];
+    final started = DateTime.now();
     try {
       for (final m in movies) {
         final versions = await discoverVersions(loader.load, m, click: loader.click);
@@ -163,22 +171,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           report.add(ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            title: Text('${r.version.isEmpty ? '' : '${r.version} · '}${shortDate(r.date)} – $label'
+            title: Text('${r.label.isNotEmpty ? '${r.label} · ' : r.version.isEmpty ? '' : '${r.version} · '}${shortDate(r.date)} – $label'
                 '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => t.name).join(', ')}'}'),
             subtitle: SelectableText('${r.detail}\n${r.debug}'),
             onTap: () => openBookMyShow(r.url),
           ));
         }
       }
+    } catch (e) {
+      report.add(Text('Check failed: $e', style: const TextStyle(color: Colors.red)));
     } finally {
       await loader.close();
+      if (mounted) setState(() => testing = false);
     }
     if (!mounted) return;
-    setState(() => testing = false);
+    final took = DateTime.now().difference(started).inSeconds;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Check result (no alarm)'),
+        title: Text('Check result (no alarm) · ${took}s'),
         content: SingleChildScrollView(
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,8 +394,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     if (stTime != null) ...[
                       const SizedBox(height: 4),
                       Text('Last check: ${TimeOfDay.fromDateTime(stTime).format(context)}'
-                          ' (${shortDate(stTime)})'),
-                      for (final l in (st!['lines'] as List)) Text('• $l'),
+                          ' (${shortDate(stTime)})'
+                          '${st!['took'] == null ? '' : ' · took ${st['took']}s'}'),
+                      if (running && _isStale(stTime, st['took'] as int?, c))
+                        const Text(
+                            '⚠ No check for a while: the phone may have paused the '
+                            'tracker. Set Battery → BMS Tracker → Unrestricted, keep '
+                            'the "watching" notification, then switch tracking off and on.',
+                            style: TextStyle(color: Colors.red)),
+                      for (final l in (st['lines'] as List)) Text('• $l'),
                       if (st['blocked'] == true)
                         const Text(
                             '⚠ BookMyShow refused some requests. If this keeps '

@@ -113,18 +113,16 @@ Future<void> _setForeground(ServiceInstance svc, String title, String body) asyn
 /// Discovered language/format versions per movie id.
 final _versionCache = <String, (DateTime, List<MovieVersion>)>{};
 
-typedef PageClick = Future<FetchedPage?> Function(String url, String buttonText);
-
 Future<List<MovieVersion>> _versionsFor(
     PageFetch fetch, PageClick? click, Movie m) async {
   if (!m.allVersions) return [MovieVersion(m.eventCode, m.slug)];
   final c = _versionCache[m.id];
   // Until other versions show up (usually when booking opens and the
   // "Book tickets" button appears), look again every cycle; after that,
-  // refresh every 30 minutes.
+  // refresh every 5 minutes, since more versions often open one by one.
   if (c != null &&
       c.$2.length > 1 &&
-      DateTime.now().difference(c.$1) < const Duration(minutes: 30)) {
+      DateTime.now().difference(c.$1) < const Duration(minutes: 5)) {
     return c.$2;
   }
   final v = await discoverVersions(fetch, m, click: click);
@@ -174,12 +172,16 @@ Future<void> runOneCycle(
     anyBlocked |= results.any((r) => r.outcome == Outcome.blocked);
 
     // Selected theaters that now have shows, with their dates.
-    final theaterDates = <String, List<DateTime>>{};
+    final theaterDates = <String, Set<DateTime>>{};
     final theaterNames = <String, String>{};
+    final theaterVersions = <String, Set<String>>{};
     for (final r in open) {
       for (final t in r.matchedTheaters) {
-        theaterDates.putIfAbsent(t.id, () => []).add(r.date);
+        theaterDates.putIfAbsent(t.id, () => {}).add(r.date);
         theaterNames[t.id] = t.name;
+        if (r.label.isNotEmpty) {
+          theaterVersions.putIfAbsent(t.id, () => {}).add(r.label);
+        }
       }
     }
     final freshTheaters = theaterDates.keys
@@ -187,12 +189,19 @@ Future<void> runOneCycle(
         .toList();
 
     if (freshTheaters.isNotEmpty) {
-      final parts = freshTheaters.map((id) =>
-          '${theaterNames[id]} (${theaterDates[id]!.map(shortDate).join(', ')})');
+      final parts = freshTheaters.map((id) {
+        final v = theaterVersions[id];
+        return '${theaterNames[id]} (${theaterDates[id]!.map(shortDate).join(', ')}'
+            '${v == null ? '' : ' · ${v.join(', ')}'})';
+      });
+      // Open the page of the first newly opened theater.
+      final first = open.firstWhere(
+          (r) => r.matchedTheaters.any((t) => t.id == freshTheaters.first),
+          orElse: () => open.first);
       await showTicketsOpenAlarm(
         title: '🎟️ ${movie.title} (${movie.city}): BOOKING OPEN!',
         body: 'Open now at ${parts.join('; ')}. Tap to open BookMyShow.',
-        url: open.first.url,
+        url: first.url,
       );
       newKeys.addAll(freshTheaters.map((id) => '${movie.id}|$id'));
     } else if (open.isNotEmpty &&
@@ -200,7 +209,8 @@ Future<void> runOneCycle(
         !alerted.contains('${movie.id}|*')) {
       await showTicketsOpenAlarm(
         title: '🎟️ ${movie.title}: booking opened (${movie.city})',
-        body: 'Shows are listed for ${open.map((r) => shortDate(r.date)).join(', ')}'
+        body: 'Shows are listed for ${open.map((r) => shortDate(r.date)).toSet().join(', ')}'
+            '${open.first.label.isEmpty ? '' : ' (${open.map((r) => r.label).where((l) => l.isNotEmpty).toSet().join(', ')})'}'
             '${cfg.selectedTheaters.isEmpty ? '' : ' (your selected theaters not seen yet – still watching them)'}.'
             ' Tap to open BookMyShow.',
         url: open.first.url,
@@ -216,8 +226,10 @@ Future<void> runOneCycle(
 
   if (newKeys.isNotEmpty) await Storage.addAlertedKeys(newKeys);
 
+  final took = DateTime.now().difference(now).inSeconds;
   await Storage.saveStatus({
     'time': now.millisecondsSinceEpoch,
+    'took': took,
     'lines': lines,
     'open': anyOpen,
     'blocked': anyBlocked,
@@ -231,6 +243,6 @@ Future<void> runOneCycle(
         : anyBlocked
             ? 'BMS Tracker – BookMyShow blocking, retrying'
             : 'BMS Tracker – watching',
-    'Checked ${_hm(now)} · ${lines.join(' | ')}',
+    'Checked ${_hm(now)} (took ${took}s) · ${lines.join(' | ')}',
   );
 }

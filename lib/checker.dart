@@ -125,7 +125,11 @@ class DateCheck {
     this.detail = '',
     this.debug = '',
     this.version = '',
+    this.label = '',
   });
+
+  /// Human name of the version, e.g. "Avengers: Doomsday - (Tamil)".
+  final String label;
 
   /// Event code of the language/format version this result is for.
   final String version;
@@ -140,14 +144,15 @@ class DateCheck {
   /// Diagnostics shown by "Check now" (page size, times, cinemas seen).
   final String debug;
 
-  DateCheck withDebug(String d, {String? version}) => DateCheck(
+  DateCheck withDebug(String d, {String? version, String? label}) => DateCheck(
       date: date,
       url: url,
       outcome: outcome,
       matchedTheaters: matchedTheaters,
       detail: detail,
       debug: d,
-      version: version ?? this.version);
+      version: version ?? this.version,
+      label: label ?? this.label);
 }
 
 /// Human-readable summary of what a fetched page contained.
@@ -165,6 +170,32 @@ String describePage(FetchedPage p) {
       'Landed on: ${p.finalUrl}\n'
       'Cinemas seen (${venues.length}): '
       '${venues.isEmpty ? '-' : venues.take(15).join(' | ')}';
+}
+
+/// The part of a show-times page a person sees as the theater list: the
+/// rendered page text (not hidden page data), cut before BookMyShow's
+/// end-of-list footer ("Unable to find what you are looking for?"), so
+/// cinema names in the footer or in embedded data can't cause a match.
+/// Pages fetched without the WebView (no rendered text) are used whole.
+String visibleListText(String body) {
+  const marker = '<!--TEXT-->';
+  final i = body.indexOf(marker);
+  if (i < 0) return body;
+  var text = body.substring(i + marker.length);
+  final end = text.toLowerCase().indexOf('unable to find what you are looking for');
+  if (end > 0) text = text.substring(0, end);
+  return text;
+}
+
+/// Human name of a show-times page's version, from its title:
+/// "Avengers: Doomsday - (Tamil) Movie Showtimes in Trichy & ..." ->
+/// "Avengers: Doomsday - (Tamil)". Empty if unknown.
+String versionLabel(String html) {
+  final t = _pageTitle(html).replaceAll('&amp;', '&').trim();
+  final i = t.toLowerCase().indexOf(' movie showtimes');
+  if (i > 0) return t.substring(0, i).trim();
+  final j = t.toLowerCase().indexOf(' showtimes');
+  return j > 0 ? t.substring(0, j).trim() : '';
 }
 
 /// True for Cloudflare / bot-protection interstitial pages.
@@ -236,7 +267,8 @@ DateCheck analyzePage({
         detail: 'No shows for this date yet: BookMyShow showed '
             '${landedDate.substring(6)}/${landedDate.substring(4, 6)} instead.');
   }
-  final hasShowTimes = _showTimeRe.hasMatch(page.body);
+  final visible = visibleListText(page.body);
+  final hasShowTimes = _showTimeRe.hasMatch(visible);
   if (!hasShowTimes) {
     return DateCheck(
         date: date,
@@ -244,7 +276,7 @@ DateCheck analyzePage({
         outcome: Outcome.notOpen,
         detail: 'Show-times page has no show times yet.');
   }
-  final body = normalize(page.body);
+  final body = normalize(visible);
   final matched = theaters.where((t) => keywordMatches(body, t.keyword)).toList();
   final missing = theaters.where((t) => !matched.contains(t)).map((t) => t.name);
   return DateCheck(
@@ -362,28 +394,44 @@ List<MovieVersion> extractVersions(String html, Movie movie, {String? landedUrl}
   return found.toList();
 }
 
+/// Result of opening a page and pressing a button on it.
+class ClickResult {
+  ClickResult(this.page, {required this.clicked});
+
+  /// The page after the click if [clicked], else the page as loaded.
+  final FetchedPage page;
+  final bool clicked;
+}
+
+/// Opens a page and presses the button with the given text.
+typedef PageClick = Future<ClickResult?> Function(String url, String buttonText);
+
+bool _usable(FetchedPage p) => p.status < 400 && !looksLikeChallenge(p.body);
+
 /// Discovers [movie]'s versions; on any failure returns just the movie.
-/// With [click], it also presses "Book tickets" on the movie page, as a
-/// person would, and records where that leads.
+/// With [click], it presses "Book tickets" on the movie page, as a person
+/// would, and records where that leads. If the movie page doesn't load
+/// with the link's name (e.g. "avengers-doomsday-english"), it retries
+/// with the plain movie name ("avengers-doomsday").
 Future<List<MovieVersion>> discoverVersions(PageFetch fetch, Movie movie,
-    {Future<FetchedPage?> Function(String url, String buttonText)? click}) async {
+    {PageClick? click}) async {
   final own = [MovieVersion(movie.eventCode, movie.slug)];
   if (!movie.allVersions) return own;
   final found = <MovieVersion>{...own};
-  try {
-    final info = movieInfoUrl(movie);
-    final clicked = click == null ? null : await click(info, 'Book tickets');
-    if (clicked != null && clicked.status < 400 && !looksLikeChallenge(clicked.body)) {
-      found.addAll(extractVersions(clicked.body, movie,
-          landedUrl: clicked.finalUrl.toString()));
+  final baseSlug = baseMovieName(movie.slug).replaceAll(' ', '-');
+  for (final slug in {movie.slug, baseSlug}) {
+    try {
+      final info = movieInfoUrl(movie.copyWith(slug: slug));
+      final clicked = click == null ? null : await click(info, 'Book tickets');
+      final page = clicked?.page ?? await fetch(info);
+      if (!_usable(page)) continue;
+      found.addAll(extractVersions(page.body, movie,
+          landedUrl: clicked?.clicked == true ? page.finalUrl.toString() : null));
+      break;
+    } catch (_) {
+      // Try the next name.
     }
-    if (found.length == 1) {
-      final page = await fetch(info);
-      if (page.status < 400 && !looksLikeChallenge(page.body)) {
-        found.addAll(extractVersions(page.body, movie));
-      }
-    }
-  } catch (_) {}
+  }
   // Cap to keep each cycle short.
   return found.take(20).toList();
 }
@@ -429,7 +477,8 @@ Future<List<DateCheck>> checkMovie({
               outcome: Outcome.notOpen,
               detail: 'Ignored: page is for a different movie.');
         }
-        results.add(r.withDebug(describePage(page), version: v.eventCode));
+        results.add(r.withDebug(describePage(page),
+            version: v.eventCode, label: versionLabel(page.body)));
       } catch (e) {
         results.add(DateCheck(
             date: date,
