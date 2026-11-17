@@ -138,8 +138,9 @@ Future<List<MovieVersion>> _versionsFor(
   return v;
 }
 
-/// Readable block for the "Background report": per version and date, the
-/// theaters listing shows and which of the user's theaters have shows.
+/// Readable block for the "Background report". With theaters selected, it
+/// is about those theaters: OPEN only when one of them has shows; other
+/// theaters are a side note.
 String describeForReport(
     Movie movie, int versionCount, List<DateCheck> results, TrackerConfig cfg) {
   final b = StringBuffer(
@@ -153,13 +154,21 @@ String describeForReport(
     b.write('\n\n• $name · ${shortDate(r.date)}');
     switch (r.outcome) {
       case Outcome.open:
-        b.write(' — ✅ OPEN (${r.showCount} show times)');
-        b.write('\n  Theaters with shows: '
-            '${r.venues.isEmpty ? '(names not readable)' : r.venues.join(' | ')}');
+        final others =
+            r.venues.where((v) => !r.matchedTheaters.any((t) => keywordMatches(normalize(v), t.keyword))).toList();
         if (selected.isEmpty) {
-          b.write('\n  Your theaters: none selected (any theater counts)');
-        } else {
+          b.write(' — ✅ OPEN (${r.showCount} show times)');
+          b.write('\n  Theaters with shows: '
+              '${r.venues.isEmpty ? '(names not readable)' : r.venues.join(' | ')}');
+        } else if (r.matchedTheaters.isNotEmpty) {
+          b.write(' — ✅ OPEN at your theater');
           b.write('\n  Your theaters: ${selected.map((t) => '${r.matchedTheaters.contains(t) ? '✔' : '✖'} ${t.name}').join(' · ')}');
+          if (others.isNotEmpty) b.write('\n  Also showing at: ${others.join(' | ')}');
+        } else {
+          b.write(' — not at your theaters yet');
+          b.write('\n  Your theaters: ${selected.map((t) => '✖ ${t.name}').join(' · ')}');
+          b.write('\n  (Showing only at: '
+              '${r.venues.isEmpty ? 'other theaters' : r.venues.join(' | ')})');
         }
       case Outcome.notOpen:
         b.write(' — not open\n  ${r.detail}');
@@ -173,14 +182,19 @@ String describeForReport(
   return b.toString();
 }
 
-/// One-line status per date: OPEN if any version is open.
-String summarize(List<DateCheck> results, List<DateTime> dates) =>
+/// One-line status per date. With theaters selected, OPEN only when one of
+/// them has shows; shows elsewhere read "not at your theaters yet".
+String summarize(List<DateCheck> results, List<DateTime> dates,
+        [List<Theater> selected = const []]) =>
     dates.map((d) {
       final rs = results.where((r) => r.date == d).toList();
-      final open = rs.where((r) => r.outcome == Outcome.open).toList();
-      if (open.isNotEmpty) {
-        final names = {for (final r in open) ...r.matchedTheaters.map((t) => t.name)};
+      final mine = rs.where((r) => isOpenForUser(r, selected)).toList();
+      if (mine.isNotEmpty) {
+        final names = {for (final r in mine) ...r.matchedTheaters.map((t) => t.name)};
         return '${shortDate(d)}: OPEN${names.isEmpty ? '' : ' @ ${names.join(', ')}'}';
+      }
+      if (rs.any((r) => r.outcome == Outcome.open)) {
+        return '${shortDate(d)}: not at your theaters yet';
       }
       if (rs.any((r) => r.outcome == Outcome.blocked)) return '${shortDate(d)}: blocked';
       if (rs.isNotEmpty && rs.every((r) => r.outcome == Outcome.error)) {
@@ -269,9 +283,9 @@ Future<void> runOneCycle(
       newKeys.add('${movie.id}|*');
     }
 
-    anyOpen |= open.isNotEmpty;
+    anyOpen |= open.any((r) => isOpenForUser(r, cfg.selectedTheaters));
     report.add(describeForReport(movie, versions.length, results, cfg));
-    final summary = summarize(results, movie.dates);
+    final summary = summarize(results, movie.dates, cfg.selectedTheaters);
     final vCount = versions.length > 1 ? ' (${versions.length} versions)' : '';
     lines.add('${movie.title} [${movie.city}]$vCount – $summary');
   }
@@ -292,10 +306,12 @@ Future<void> runOneCycle(
   await _setForeground(
     svc,
     anyOpen
-        ? 'BMS Tracker – BOOKING OPEN'
+        ? 'BMS Tracker – OPEN at ${cfg.selectedTheaters.isEmpty ? 'a theater' : 'your theater'}!'
         : anyBlocked
             ? 'BMS Tracker – BookMyShow blocking, retrying'
-            : 'BMS Tracker – watching',
+            : cfg.selectedTheaters.isEmpty
+                ? 'BMS Tracker – watching all theaters'
+                : 'BMS Tracker – watching ${cfg.selectedTheaters.map((t) => t.name).join(', ')}',
     'Checked ${_hm(now)} (took ${took}s) · ${lines.join(' | ')}',
   );
 }

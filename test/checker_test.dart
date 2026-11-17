@@ -1,4 +1,4 @@
-import 'package:bms_tracker/background.dart' show describeForReport;
+import 'package:bms_tracker/background.dart' show describeForReport, summarize;
 import 'package:bms_tracker/checker.dart';
 import 'package:bms_tracker/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -445,9 +445,36 @@ void main() {
           showCount: 5);
       final text = describeForReport(m, 2, [r],
           TrackerConfig(city: 'trichy', movies: [m], theaters: [mega, thiru]));
-      expect(text, contains('Avengers: Doomsday · Tamil · MS-Infinity Vsn 3d · 17 Dec — ✅ OPEN (5 show times)'));
-      expect(text, contains('Theaters with shows: Megastar Cinemas: Premium Large Format ATMOS LASER'));
+      expect(text, contains('Avengers: Doomsday · Tamil · MS-Infinity Vsn 3d · 17 Dec — ✅ OPEN at your theater'));
       expect(text, contains('✔ Megastar Cinemas · ✖ LA Cinema: Thiruverumbur'));
+      expect(text, isNot(contains('Also showing at')));
+    });
+
+    test('only other theaters showing = not at your theaters yet', () {
+      final thiru = Theater(name: 'LA Cinema: Thiruverumbur', keyword: 'Thiruverumbur', selected: true);
+      final m = Movie(title: 'Avengers', url: 'u', eventCode: 'ET00439706',
+          slug: 'avengers-doomsday', city: 'trichy', startDate: DateTime(2026, 12, 17));
+      final r = DateCheck(
+          date: DateTime(2026, 12, 17),
+          url: 'u',
+          outcome: Outcome.open,
+          version: 'ET00526312',
+          label: 'Avengers: Doomsday',
+          format: 'Tamil · MS-Infinity Vsn 3d',
+          venues: const ['Megastar Cinemas: Premium Large Format ATMOS LASER'],
+          showCount: 18);
+      final cfg = TrackerConfig(city: 'trichy', movies: [m], theaters: [thiru]);
+      final text = describeForReport(m, 2, [r], cfg);
+      expect(text, contains('17 Dec — not at your theaters yet'));
+      expect(text, contains('✖ LA Cinema: Thiruverumbur'));
+      expect(text, contains('(Showing only at: Megastar Cinemas'));
+      expect(text, isNot(contains('✅')));
+      expect(isOpenForUser(r, cfg.selectedTheaters), isFalse);
+      expect(summarize([r], [DateTime(2026, 12, 17)], cfg.selectedTheaters),
+          '17 Dec: not at your theaters yet');
+      // With no theater selected, any theater counts.
+      expect(isOpenForUser(r, const []), isTrue);
+      expect(summarize([r], [DateTime(2026, 12, 17)]), '17 Dec: OPEN');
     });
   });
 
