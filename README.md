@@ -1,8 +1,9 @@
 # BMS Tracker for Trichy
 
 An Android app that checks BookMyShow every minute and **sounds a loud alarm**
-on your phone when ticket booking opens for your movie (for example
-*Avengers: Doomsday*) at the Tiruchirappalli theaters you pick.
+on your phone when **any movie** you add becomes bookable **at the theaters you
+selected, on the dates you selected**. It checks every language and format of
+the movie, so you never have to pick one.
 
 The idea comes from [albinpk/bookmyshow-tracker](https://github.com/albinpk/bookmyshow-tracker),
 which checks every 15 minutes and only looks at the whole city. This app adds:
@@ -24,8 +25,8 @@ Every merge to `main` publishes a new release named `v<version>-build<N>`.
 
 ## Set up (takes 2 minutes, do it today)
 
-1. **Add the movie.** In the BookMyShow app or website, open *Avengers: Doomsday* with Trichy as the city. Tap **Share → Copy link**. In BMS Tracker, tap **+ Movie** and paste the link. It must contain the code `ET00…`.
-2. **Pick the dates.** Set the first show date (17 Dec 2026 by default, the Avengers: Doomsday release date) and how many days to watch (1–7).
+1. **Add the movie.** In the BookMyShow app or website, open the movie (any movie) with Trichy as the city. Tap **Share → Copy link**. In BMS Tracker, tap **+ Movie** and paste the link. It must contain the code `ET00…`.
+2. **Pick the dates.** Set the show date (today by default) and how many days to watch from it (1–7).
 3. **Tick your theaters.** If a name in the list is wrong, use **Load from BookMyShow**: paste the "Book tickets" link of *any movie running in Trichy today* and pick theaters from the real list. You can also edit the match keyword yourself.
 4. Turn on the **switch at the top right**. Allow notifications, and allow the app to **ignore battery optimisation**. This is important.
 5. Tap **Test alarm** to hear the alert.
@@ -60,14 +61,11 @@ checked and alarmed separately.
 ## All languages and formats
 
 BookMyShow gives each version of a movie its own code (English 2D, Tamil
-MS-Infinity, Hindi 3D…). **Watch all languages & formats** is on by default
-when you add a movie. The app opens the movie's BookMyShow page about once an
-hour, finds every version listed there, and checks them all. An alarm rings
-when any version opens at your theaters. **Check now** shows "Versions found"
-and a result line for each version.
-
-If a version you care about is missing from "Versions found", add its
-"Book tickets" link as a separate movie.
+MS-Infinity, Hindi 3D…). You don't need to add them separately. For every
+movie, the app opens its BookMyShow page and presses **Book tickets**, as you
+would, to find all the versions, then checks every one of them. The alarm rings
+when **any** version has shows at your selected theaters on your dates.
+**Check now** lists the languages/formats it found.
 
 ## Keep it alive
 
@@ -86,8 +84,11 @@ For each date it fetches
 - If BookMyShow redirects away from the show-times page, or the page has no show times, booking is not open.
 - If show times are present, booking is open. The app then looks for your theater keywords on the page. A keyword only matches at the start of a word, so "Sona" matches "Sona Mina" but not "personal".
 
-Each theater raises the alarm once per movie. **Settings → Reset alerts**
-makes it ring again.
+Each selected theater raises the alarm once per movie. **Settings → Reset
+alerts** makes it ring again. By default, alarms ring **only for your selected
+theaters**. If no theater is selected, any theater counts. You can turn on
+**Settings → Also alarm when booking opens at other theaters** for one extra
+alarm when a movie opens anywhere.
 
 ## Build it yourself
 

@@ -158,7 +158,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           padding: const EdgeInsets.only(top: 8),
           child: Text(
               '${m.title} · ${m.city}\n'
-              '${m.allVersions ? 'Versions found: ${versions.length} (${versions.map((v) => v.eventCode).join(', ')})' : 'This version only'}',
+              'Languages/formats found: ${versions.length} (${versions.map((v) => v.eventCode).join(', ')})',
               style: const TextStyle(fontWeight: FontWeight.bold)),
         ));
         for (final r in res) {
@@ -450,7 +450,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Card(
                 child: ListTile(
                   title: Text(m.title),
-                  subtitle: Text('${m.city} · ${m.eventCode}${m.allVersions ? ' + all versions' : ''} · ${m.dates.map(shortDate).join(', ')}'),
+                  subtitle: Text('${m.dates.map(shortDate).join(', ')} · ${m.city} · all languages & formats'),
                   onTap: () => _editMovie(m),
                   leading: IconButton(
                     icon: const Icon(Icons.delete_outline),
@@ -471,10 +471,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
                 c.selectedTheaters.isEmpty
-                    ? 'No theater selected: you will be alerted when booking opens anywhere in ${c.city}.'
+                    ? 'No theater selected: the alarm rings when booking opens at any theater.'
                     : c.alertAnyTheater
-                        ? 'Alarm for your theaters, plus one alarm when booking opens anywhere in ${c.city}.'
-                        : 'Alarm only for the selected theaters.',
+                        ? 'Alarm for your theaters, plus one alarm when booking opens at any other theater.'
+                        : 'Alarm only when a selected theater has shows on your dates.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -537,17 +537,13 @@ class _MovieDialogState extends State<MovieDialog> {
   late final url = TextEditingController(text: widget.existing?.url ?? '');
   late final title = TextEditingController(text: widget.existing?.title ?? '');
   late DateTime start = widget.existing?.startDate ?? _defaultStart();
-  late int days = widget.existing?.days ?? 3;
-  late bool allVersions = widget.existing?.allVersions ?? true;
+  late int days = widget.existing?.days ?? 1;
   late final city = TextEditingController(text: widget.existing?.city ?? widget.city);
   String? error;
 
   static DateTime _defaultStart() {
-    // Avengers: Doomsday India release (17 Dec 2026, per BookMyShow). Editable.
-    final release = DateTime(2026, 12, 17);
     final today = DateTime.now();
-    final t = DateTime(today.year, today.month, today.day);
-    return release.isBefore(t) ? t : release;
+    return DateTime(today.year, today.month, today.day);
   }
 
   void _urlChanged(String v) {
@@ -573,7 +569,7 @@ class _MovieDialogState extends State<MovieDialog> {
         eventCode: p.eventCode,
         slug: p.slug,
         city: c.isEmpty ? (p.city ?? widget.city) : c,
-        allVersions: allVersions,
+        allVersions: true, // every language & format is always checked
         startDate: start,
         days: days,
         enabled: widget.existing?.enabled ?? true,
@@ -595,15 +591,13 @@ class _MovieDialogState extends State<MovieDialog> {
             decoration: InputDecoration(
               labelText: 'BookMyShow movie link',
               hintText:
-                  'https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00…',
+                  'https://in.bookmyshow.com/movies/trichy/<movie>/ET00…',
               errorText: error,
               errorMaxLines: 3,
               helperText:
-                  'Each language/format (Tamil, English, 3D…) has its own code on '
-                  'BookMyShow. Add one entry per version you would watch: on '
-                  'in.bookmyshow.com pick the language, open the show-times page '
-                  'and copy its link (…/buytickets/ET00…/date).',
-              helperMaxLines: 6,
+                  'Any BookMyShow link of the movie (movie page or "Book tickets" '
+                  'page). Every language and format is checked automatically.',
+              helperMaxLines: 4,
             ),
           ),
           TextField(
@@ -620,7 +614,7 @@ class _MovieDialogState extends State<MovieDialog> {
           const SizedBox(height: 12),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('First show date to watch'),
+            title: const Text('Show date to watch'),
             subtitle: Text('${shortDate(start)} ${start.year}'),
             trailing: const Icon(Icons.calendar_month),
             onTap: () async {
@@ -633,17 +627,9 @@ class _MovieDialogState extends State<MovieDialog> {
               if (d != null) setState(() => start = d);
             },
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: allVersions,
-            onChanged: (v) => setState(() => allVersions = v),
-            title: const Text('Watch all languages & formats'),
-            subtitle: const Text(
-                'Also checks the other versions (Tamil, Hindi, 3D, IMAX…) listed '
-                'on this movie\'s BookMyShow page.'),
-          ),
           Row(children: [
-            const Expanded(child: Text('Days to watch')),
+            const Expanded(
+                child: Text('Days to watch (from that date)')),
             IconButton(
                 onPressed: days > 1 ? () => setState(() => days--) : null,
                 icon: const Icon(Icons.remove)),
@@ -783,7 +769,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
             contentPadding: EdgeInsets.zero,
             value: any,
             onChanged: (v) => setState(() => any = v),
-            title: const Text('Also alarm when booking opens at any theater'),
+            title: const Text('Also alarm when booking opens at other theaters'),
+            subtitle: const Text('Off: alarm only for your selected theaters.'),
           ),
           TextField(
               controller: city,

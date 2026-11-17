@@ -93,7 +93,8 @@ class Movie {
   /// [fallbackCity] is used for movies saved before cities were per movie.
   factory Movie.fromMap(Map<String, dynamic> m, {String fallbackCity = defaultCity}) => Movie(
         city: (m['city'] as String?) ?? fallbackCity,
-        allVersions: (m['allVersions'] as bool?) ?? true,
+        // Every language & format is always checked (older builds had a switch).
+        allVersions: true,
         title: m['title'] as String,
         url: m['url'] as String,
         eventCode: m['eventCode'] as String,
@@ -142,7 +143,7 @@ class TrackerConfig {
     required this.movies,
     required this.theaters,
     this.intervalSeconds = 60,
-    this.alertAnyTheater = true,
+    this.alertAnyTheater = false,
     this.showtimesTemplate = defaultShowtimesTemplate,
   });
 
@@ -200,7 +201,7 @@ class TrackerConfig {
           .map((e) => Theater.fromMap(e as Map<String, dynamic>))
           .toList(),
       intervalSeconds: (m['intervalSeconds'] as int?) ?? 60,
-      alertAnyTheater: (m['alertAnyTheater'] as bool?) ?? true,
+      alertAnyTheater: (m['alertAnyTheater'] as bool?) ?? false,
       showtimesTemplate:
           (m['showtimesTemplate'] as String?) ?? defaultShowtimesTemplate,
     );

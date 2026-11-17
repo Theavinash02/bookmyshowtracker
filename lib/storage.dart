@@ -26,7 +26,7 @@ class Storage {
   }
 
   static const _kDefaultsVersion = 'defaults_version';
-  static const _defaultsVersion = 4;
+  static const _defaultsVersion = 5;
 
   /// Adds theaters introduced in app updates (once, so deletions stick).
   static Future<TrackerConfig> _addNewDefaultTheaters(TrackerConfig c) async {
@@ -39,6 +39,8 @@ class Storage {
     if (v < 4 && c.city == 'tiruchirappalli') {
       updated = updated.copyWith(city: defaultCity);
     }
+    // v5: alarms only for the selected theaters by default.
+    if (v < 5) updated = updated.copyWith(alertAnyTheater: false);
     await saveConfig(updated);
     await _p.setInt(_kDefaultsVersion, _defaultsVersion);
     return updated;
