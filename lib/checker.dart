@@ -398,7 +398,10 @@ DateCheck analyzePage({
           detail: 'Show-times page has no show times yet.');
     }
     source = 'page data';
-    listText = data;
+    // Only the cinema names the data lists as venues: the data also
+    // mentions other cinemas (e.g. a list of all cinemas in the city),
+    // which must not count as having shows.
+    listText = extractVenueNames(data).join('\n');
   }
   final body = normalize(listText);
   final matched = theaters.where((t) => keywordMatches(body, t.keyword)).toList();
