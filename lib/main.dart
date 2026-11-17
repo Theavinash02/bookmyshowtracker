@@ -208,7 +208,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           report.add(ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            title: Text('${r.label.isNotEmpty ? '${r.label} · ' : r.version.isEmpty ? '' : '${r.version} · '}${shortDate(r.date)} – $label'
+            title: Text('${r.label.isNotEmpty ? '${r.label} · ' : r.version.isEmpty ? '' : '${r.version} · '}'
+                '${r.format.isNotEmpty ? '${r.format} · ' : ''}${shortDate(r.date)} – $label'
+                '${r.venues.isEmpty ? '' : '\nTheaters with shows: ${r.venues.join(' | ')}'}'
                 '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => '${t.name} (${alerted.contains('${m.id}|${t.id}') ? 'alarm already rang earlier' : 'alarm ringing now'})').join(', ')}'}'),
             subtitle: SelectableText('${r.detail}\n${r.debug}'),
             onTap: () => openBookMyShow(r.url),

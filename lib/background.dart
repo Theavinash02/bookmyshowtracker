@@ -138,6 +138,41 @@ Future<List<MovieVersion>> _versionsFor(
   return v;
 }
 
+/// Readable block for the "Background report": per version and date, the
+/// theaters listing shows and which of the user's theaters have shows.
+String describeForReport(
+    Movie movie, int versionCount, List<DateCheck> results, TrackerConfig cfg) {
+  final b = StringBuffer(
+      '▶ ${movie.title} · ${movie.city} · $versionCount language/format${versionCount == 1 ? '' : 's'} found');
+  final selected = cfg.selectedTheaters;
+  for (final r in results) {
+    final name = [
+      r.label.isNotEmpty ? r.label : movie.title,
+      if (r.format.isNotEmpty) r.format,
+    ].join(' · ');
+    b.write('\n\n• $name · ${shortDate(r.date)}');
+    switch (r.outcome) {
+      case Outcome.open:
+        b.write(' — ✅ OPEN (${r.showCount} show times)');
+        b.write('\n  Theaters with shows: '
+            '${r.venues.isEmpty ? '(names not readable)' : r.venues.join(' | ')}');
+        if (selected.isEmpty) {
+          b.write('\n  Your theaters: none selected (any theater counts)');
+        } else {
+          b.write('\n  Your theaters: ${selected.map((t) => '${r.matchedTheaters.contains(t) ? '✔' : '✖'} ${t.name}').join(' · ')}');
+        }
+      case Outcome.notOpen:
+        b.write(' — not open\n  ${r.detail}');
+      case Outcome.blocked:
+        b.write(' — ⚠ BLOCKED by BookMyShow\n  ${r.detail}');
+      case Outcome.error:
+        b.write(' — ⚠ ERROR\n  ${r.detail}');
+    }
+    b.write('\n  Code ${r.version}');
+  }
+  return b.toString();
+}
+
 /// One-line status per date: OPEN if any version is open.
 String summarize(List<DateCheck> results, List<DateTime> dates) =>
     dates.map((d) {
@@ -236,19 +271,7 @@ Future<void> runOneCycle(
     }
 
     anyOpen |= open.isNotEmpty;
-    report.add('▶ ${movie.title} · ${movie.city} · ${versions.length} language/format(s)');
-    for (final r in results) {
-      final o = switch (r.outcome) {
-        Outcome.open => 'OPEN',
-        Outcome.notOpen => 'not open',
-        Outcome.blocked => 'BLOCKED',
-        Outcome.error => 'ERROR',
-      };
-      final firstDebug = r.debug.split('\n').first;
-      report.add('${r.label.isNotEmpty ? r.label : r.version} · ${shortDate(r.date)} – $o'
-          '${r.matchedTheaters.isEmpty ? '' : ' @ ${r.matchedTheaters.map((t) => t.name).join(', ')}'}'
-          '\n${r.detail}${firstDebug.isEmpty ? '' : '\n$firstDebug'}');
-    }
+    report.add(describeForReport(movie, versions.length, results, cfg));
     final summary = summarize(results, movie.dates);
     final vCount = versions.length > 1 ? ' (${versions.length} versions)' : '';
     lines.add('${movie.title} [${movie.city}]$vCount – $summary');
@@ -261,7 +284,7 @@ Future<void> runOneCycle(
     'time': now.millisecondsSinceEpoch,
     'took': took,
     'lines': lines,
-    'report': report,
+    'report': ['🕒 Checked ${_hm(now)} · took ${took}s', ...report],
     'open': anyOpen,
     'blocked': anyBlocked,
   });

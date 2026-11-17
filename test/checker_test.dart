@@ -1,3 +1,4 @@
+import 'package:bms_tracker/background.dart' show describeForReport;
 import 'package:bms_tracker/checker.dart';
 import 'package:bms_tracker/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -388,6 +389,52 @@ void main() {
       final r = check(drawn);
       expect(r.matchedTheaters.map((t) => t.name), ['Megastar Cinemas']);
       expect(r.detail, contains('from screen'));
+    });
+  });
+
+  group('background report details', () {
+    const drawn = '<html><title>Avengers: Doomsday Movie Showtimes in Trichy</title></html>'
+        '\n<!--TEXT-->\nTamil - MS-Infinity Vsn 3d\nMegastar Cinemas: Premium Large Format ATMOS LASER\n'
+        'Cancellation available\n08:00 AM\n11:50 AM\nUnable to find what you are looking for?';
+    const undrawn = '<html></html>\n<!--TEXT-->\nloading'
+        '\n<!--DATA-->\n{"eventCode":"ET00526312","language":"Tamil","dimension":"MS-Infinity Vsn 3d",'
+        '"venueName":"Megastar Cinemas: Premium Large Format ATMOS LASER","sessionId":"1","showTime":"08:00 AM"}';
+
+    test('language/format from the page or its data', () {
+      expect(versionFormat(drawn, 'ET00526312'), 'Tamil · MS-Infinity Vsn 3d');
+      expect(versionFormat(undrawn, 'ET00526312'), 'Tamil · MS-Infinity Vsn 3d');
+      expect(versionFormat('<html></html>', 'ET00526312'), '');
+    });
+
+    test('theaters with shows and show count, drawn or not', () {
+      expect(theatersWithShows(drawn, 'ET00526312'),
+          ['Megastar Cinemas: Premium Large Format ATMOS LASER']);
+      expect(theatersWithShows(undrawn, 'ET00526312'),
+          ['Megastar Cinemas: Premium Large Format ATMOS LASER']);
+      expect(showTimeCount(drawn, 'ET00526312'), 2);
+      expect(showTimeCount(undrawn, 'ET00526312'), 1);
+    });
+
+    test('report lists theaters and marks the selected ones', () {
+      final mega = Theater(name: 'Megastar Cinemas', keyword: 'Megastar', selected: true);
+      final thiru = Theater(name: 'LA Cinema: Thiruverumbur', keyword: 'Thiruverumbur', selected: true);
+      final m = Movie(title: 'Avengers', url: 'u', eventCode: 'ET00439706',
+          slug: 'avengers-doomsday', city: 'trichy', startDate: DateTime(2026, 12, 17));
+      final r = DateCheck(
+          date: DateTime(2026, 12, 17),
+          url: 'u',
+          outcome: Outcome.open,
+          matchedTheaters: [mega],
+          version: 'ET00526312',
+          label: 'Avengers: Doomsday',
+          format: 'Tamil · MS-Infinity Vsn 3d',
+          venues: const ['Megastar Cinemas: Premium Large Format ATMOS LASER'],
+          showCount: 5);
+      final text = describeForReport(m, 2, [r],
+          TrackerConfig(city: 'trichy', movies: [m], theaters: [mega, thiru]));
+      expect(text, contains('Avengers: Doomsday · Tamil · MS-Infinity Vsn 3d · 17 Dec — ✅ OPEN (5 show times)'));
+      expect(text, contains('Theaters with shows: Megastar Cinemas: Premium Large Format ATMOS LASER'));
+      expect(text, contains('✔ Megastar Cinemas · ✖ LA Cinema: Thiruverumbur'));
     });
   });
 

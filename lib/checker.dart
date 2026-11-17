@@ -138,7 +138,19 @@ class DateCheck {
     this.debug = '',
     this.version = '',
     this.label = '',
+    this.venues = const [],
+    this.format = '',
+    this.showCount = 0,
   });
+
+  /// Theaters BookMyShow lists with shows on this page.
+  final List<String> venues;
+
+  /// Language and format of this version, e.g. "Tamil · MS-Infinity Vsn 3d".
+  final String format;
+
+  /// Number of show times seen.
+  final int showCount;
 
   /// Human name of the version, e.g. "Avengers: Doomsday - (Tamil)".
   final String label;
@@ -156,15 +168,24 @@ class DateCheck {
   /// Diagnostics shown by "Check now" (page size, times, cinemas seen).
   final String debug;
 
-  DateCheck withDebug(String d, {String? version, String? label}) => DateCheck(
-      date: date,
-      url: url,
-      outcome: outcome,
-      matchedTheaters: matchedTheaters,
-      detail: detail,
-      debug: d,
-      version: version ?? this.version,
-      label: label ?? this.label);
+  DateCheck withDebug(String d,
+          {String? version,
+          String? label,
+          List<String>? venues,
+          String? format,
+          int? showCount}) =>
+      DateCheck(
+          date: date,
+          url: url,
+          outcome: outcome,
+          matchedTheaters: matchedTheaters,
+          detail: detail,
+          debug: d,
+          version: version ?? this.version,
+          label: label ?? this.label,
+          venues: venues ?? this.venues,
+          format: format ?? this.format,
+          showCount: showCount ?? this.showCount);
 }
 
 /// Human-readable summary of what a fetched page contained.
@@ -231,6 +252,46 @@ final _sessionKeyRe = RegExp(
 /// True if downloaded data lists shows (session ids / show times).
 bool _dataHasShows(String data) =>
     data.isNotEmpty && (_showTimeRe.hasMatch(data) || _sessionKeyRe.hasMatch(data));
+
+/// Names of theaters listed with shows: from the drawn list, plus names in
+/// the page's show-time data for [eventCode].
+List<String> theatersWithShows(String body, String eventCode) {
+  final names = <String>{
+    ...extractVenueNames(visibleListText(body)),
+    ...extractVenueNames(pageDataText(body, eventCode)),
+  };
+  return names.toList()..sort();
+}
+
+/// Show times on the drawn list, or else in the page data.
+int showTimeCount(String body, String eventCode) {
+  final drawn = _showTimeRe.allMatches(visibleListText(body)).length;
+  if (drawn > 0) return drawn;
+  final data = pageDataText(body, eventCode);
+  final times = _showTimeRe.allMatches(data).length;
+  return times > 0 ? times : _sessionKeyRe.allMatches(data).length;
+}
+
+const _languages =
+    'Tamil|English|Hindi|Telugu|Malayalam|Kannada|Bengali|Marathi|Punjabi|Gujarati|Odia';
+
+/// Language and format of a show-times page, e.g. "Tamil · MS-Infinity Vsn
+/// 3d", from the page's format selector or its data. Empty if unknown.
+String versionFormat(String body, String eventCode) {
+  final shown = RegExp('\\b($_languages)\\s*[-–•·]\\s*([^\\n]{1,32})')
+      .firstMatch(visibleListText(body));
+  if (shown != null) return '${shown.group(1)} · ${shown.group(2)!.trim()}';
+  final data = pageDataText(body, eventCode);
+  final lang = RegExp('"(?:language|lang|eventLanguage)"\\s*:\\s*"($_languages)"',
+          caseSensitive: false)
+      .firstMatch(data)
+      ?.group(1);
+  final fmt = RegExp(r'"(?:format|dimension|eventDimension|screenFormat)"\s*:\s*"([^"]{1,32})"',
+          caseSensitive: false)
+      .firstMatch(data)
+      ?.group(1);
+  return [?lang, ?fmt].join(' · ');
+}
 
 /// Human name of a show-times page's version, from its title:
 /// "Avengers: Doomsday - (Tamil) Movie Showtimes in Trichy & ..." ->
@@ -540,8 +601,13 @@ Future<List<DateCheck>> checkMovie({
               outcome: Outcome.notOpen,
               detail: 'Ignored: page is for a different movie.');
         }
+        final open = r.outcome == Outcome.open;
         results.add(r.withDebug(describePage(page),
-            version: v.eventCode, label: versionLabel(page.body)));
+            version: v.eventCode,
+            label: versionLabel(page.body),
+            format: versionFormat(page.body, v.eventCode),
+            venues: open ? theatersWithShows(page.body, v.eventCode) : const [],
+            showCount: open ? showTimeCount(page.body, v.eventCode) : 0));
       } catch (e) {
         results.add(DateCheck(
             date: date,
