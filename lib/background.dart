@@ -229,9 +229,8 @@ Future<void> runOneCycle(
       for (final t in r.matchedTheaters) {
         theaterDates.putIfAbsent(t.id, () => {}).add(r.date);
         theaterNames[t.id] = t.name;
-        if (r.label.isNotEmpty) {
-          theaterVersions.putIfAbsent(t.id, () => {}).add(r.label);
-        }
+        final v = r.format.isNotEmpty ? r.format : r.label;
+        if (v.isNotEmpty) theaterVersions.putIfAbsent(t.id, () => {}).add(v);
       }
     }
     final freshTheaters = theaterDates.keys

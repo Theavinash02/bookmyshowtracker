@@ -364,6 +364,19 @@ void main() {
       expect(r.detail, contains('from page data'));
     });
 
+    test('a cinema mentioned in the data but not listed with shows does not match', () {
+      // Real case: data listed only Megastar as a venue, but also mentioned
+      // LA Cinema: Thiruverumbur elsewhere (e.g. a list of the city's cinemas).
+      const body = '<html></html>\n<!--TEXT-->\nloading'
+          '\n<!--DATA-->\n{"eventCode":"ET00526312","venues":[{"venueName":"Megastar Cinemas: Premium Large Format ATMOS LASER",'
+          '"shows":[{"sessionId":"1","showTime":"08:00 AM"}]}],'
+          '"cityCinemas":["LA Cinema: Thiruverumbur","LA Cinema: Maris, Trichy"]}';
+      final r = check(body);
+      expect(r.outcome, Outcome.open);
+      expect(r.matchedTheaters.map((t) => t.name), ['Megastar Cinemas']);
+      expect(r.detail, contains('Not on page yet: LA Cinema: Thiruverumbur'));
+    });
+
     test('data about another movie is ignored', () {
       const other = '<html></html>\n<!--TEXT-->\nnothing'
           '\n<!--DATA-->\n{"eventCode":"ET00999999","venueName":"Megastar","showTime":"08:00 AM"}';

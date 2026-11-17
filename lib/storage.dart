@@ -26,7 +26,7 @@ class Storage {
   }
 
   static const _kDefaultsVersion = 'defaults_version';
-  static const _defaultsVersion = 5;
+  static const _defaultsVersion = 6;
 
   /// Adds theaters introduced in app updates (once, so deletions stick).
   static Future<TrackerConfig> _addNewDefaultTheaters(TrackerConfig c) async {
@@ -41,6 +41,9 @@ class Storage {
     }
     // v5: alarms only for the selected theaters by default.
     if (v < 5) updated = updated.copyWith(alertAnyTheater: false);
+    // v6: earlier builds could ring for a theater that only appeared in
+    // page data without shows; forget those so the real opening rings.
+    if (v < 6) await clearAlerted();
     await saveConfig(updated);
     await _p.setInt(_kDefaultsVersion, _defaultsVersion);
     return updated;
