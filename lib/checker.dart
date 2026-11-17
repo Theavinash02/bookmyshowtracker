@@ -220,14 +220,6 @@ DateCheck analyzePage({
         outcome: Outcome.notOpen,
         detail: 'Redirected away from show-times (to $finalUrl).');
   }
-  final hasShowTimes = _showTimeRe.hasMatch(page.body);
-  if (!hasShowTimes) {
-    return DateCheck(
-        date: date,
-        url: requestedUrl,
-        outcome: Outcome.notOpen,
-        detail: 'Show-times page has no show times yet.');
-  }
   // BookMyShow sends you to another date (often today) when the requested
   // date has no shows yet: that is NOT open for the requested date.
   final landedDate = RegExp(r'/(\d{8})(?:[/?#]|$)').firstMatch(finalUrl)?.group(1);
@@ -236,7 +228,16 @@ DateCheck analyzePage({
         date: date,
         url: requestedUrl,
         outcome: Outcome.notOpen,
-        detail: 'No shows for this date yet (BookMyShow showed $landedDate instead).');
+        detail: 'No shows for this date yet: BookMyShow showed '
+            '${landedDate.substring(6)}/${landedDate.substring(4, 6)} instead.');
+  }
+  final hasShowTimes = _showTimeRe.hasMatch(page.body);
+  if (!hasShowTimes) {
+    return DateCheck(
+        date: date,
+        url: requestedUrl,
+        outcome: Outcome.notOpen,
+        detail: 'Show-times page has no show times yet.');
   }
   final body = normalize(page.body);
   final matched = theaters.where((t) => keywordMatches(body, t.keyword)).toList();
