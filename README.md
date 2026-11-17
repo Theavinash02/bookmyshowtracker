@@ -57,6 +57,18 @@ link, for example `…/movies/trichy/avengers-doomsday-english/ET00439706` and
 `…/movies/tiruchirappalli/avengers-doomsday-english/ET00439706`. Each entry is
 checked and alarmed separately.
 
+## All languages and formats
+
+BookMyShow gives each version of a movie its own code (English 2D, Tamil
+MS-Infinity, Hindi 3D…). **Watch all languages & formats** is on by default
+when you add a movie. The app opens the movie's BookMyShow page about once an
+hour, finds every version listed there, and checks them all. An alarm rings
+when any version opens at your theaters. **Check now** shows "Versions found"
+and a result line for each version.
+
+If a version you care about is missing from "Versions found", add its
+"Book tickets" link as a separate movie.
+
 ## Keep it alive
 
 - Leave the "BMS Tracker – watching" notification in place. That notification is the background service.

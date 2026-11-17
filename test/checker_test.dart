@@ -106,6 +106,70 @@ void main() {
     expect(r.matchedTheaters.single.name, 'Megastar');
   });
 
+  group('all languages & formats', () {
+    final eng = Movie(
+        title: 'Avengers',
+        url: 'u',
+        eventCode: 'ET00439706',
+        slug: 'avengers-doomsday-english',
+        city: 'trichy',
+        startDate: DateTime(2026, 12, 17),
+        days: 1);
+
+    test('baseMovieName strips language/format words', () {
+      expect(baseMovieName('avengers-doomsday-english'), 'avengers doomsday');
+      expect(baseMovieName('avengers-doomsday-tamil-3d'), 'avengers doomsday');
+      expect(baseMovieName('scene-tamil'), 'scene');
+      expect(baseMovieName('english'), 'english');
+    });
+
+    test('extractVersions finds sibling versions, skips other movies', () {
+      const html = '<a href="/movies/trichy/avengers-doomsday/buytickets/ET00526312/20261217">'
+          '<a href="/movies/trichy/avengers-doomsday-hindi/ET00439999">'
+          '<a href="/movies/trichy/some-other-film/ET00111111">'
+          '{"eventCode":"ET00422222"}';
+      final v = extractVersions(html, eng);
+      expect(v.map((e) => e.eventCode),
+          ['ET00439706', 'ET00526312', 'ET00439999', 'ET00422222']);
+      expect(v[1].slug, 'avengers-doomsday');
+      expect(v[2].slug, 'avengers-doomsday-hindi');
+    });
+
+    test('checkMovie checks each version; other-movie pages are ignored', () async {
+      final cfg = TrackerConfig(city: 'trichy', movies: [eng], theaters: [
+        Theater(name: 'Megastar', keyword: 'Megastar', selected: true)
+      ]);
+      Future<FetchedPage> fetch(String url) async {
+        if (url.contains('ET00526312')) {
+          return FetchedPage(200, Uri.parse(url),
+              '<title>Avengers: Doomsday Movie Showtimes in Trichy</title> Megastar 08:00 AM');
+        }
+        if (url.contains('ET00422222')) {
+          return FetchedPage(200, Uri.parse(url),
+              '<title>Some Other Film Showtimes</title> Megastar 09:00 AM');
+        }
+        // English: not open yet, BookMyShow shows today instead.
+        return FetchedPage(200, Uri.parse(url.replaceAll('20261217', '20261117')), '');
+      }
+      final res = await checkMovie(fetch: fetch, config: cfg, movie: eng, versions: const [
+        MovieVersion('ET00439706', 'avengers-doomsday-english'),
+        MovieVersion('ET00526312', 'avengers-doomsday'),
+        MovieVersion('ET00422222', 'avengers-doomsday-english'),
+      ]);
+      final byV = {for (final r in res) r.version: r};
+      expect(byV['ET00439706']!.outcome, Outcome.notOpen);
+      expect(byV['ET00526312']!.outcome, Outcome.open);
+      expect(byV['ET00526312']!.matchedTheaters.single.name, 'Megastar');
+      expect(byV['ET00422222']!.outcome, Outcome.notOpen);
+      expect(byV['ET00422222']!.detail, contains('different movie'));
+    });
+
+    test('allVersions defaults to true, including old saved movies', () {
+      final json = '{"movies":[{"title":"t","url":"u","eventCode":"ET1","slug":"s","startDate":0}],"theaters":[]}';
+      expect(TrackerConfig.fromJson(json).movies.single.allVersions, isTrue);
+    });
+  });
+
   test('buildShowtimesUrl', () {
     expect(
         buildShowtimesUrl(

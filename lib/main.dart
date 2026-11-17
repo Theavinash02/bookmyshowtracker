@@ -143,10 +143,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final report = <Widget>[];
     try {
       for (final m in movies) {
-        final res = await checkMovie(fetch: loader.load, config: c, movie: m);
+        final versions = await discoverVersions(loader.load, m);
+        final res = await checkMovie(
+            fetch: loader.load, config: c, movie: m, versions: versions);
         report.add(Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Text('${m.title} · ${m.city}',
+          child: Text(
+              '${m.title} · ${m.city}\n'
+              '${m.allVersions ? 'Versions found: ${versions.length} (${versions.map((v) => v.eventCode).join(', ')})' : 'This version only'}',
               style: const TextStyle(fontWeight: FontWeight.bold)),
         ));
         for (final r in res) {
@@ -159,7 +163,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           report.add(ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            title: Text('${shortDate(r.date)} – $label'
+            title: Text('${r.version.isEmpty ? '' : '${r.version} · '}${shortDate(r.date)} – $label'
                 '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => t.name).join(', ')}'}'),
             subtitle: SelectableText('${r.detail}\n${r.debug}'),
             onTap: () => openBookMyShow(r.url),
@@ -428,7 +432,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Card(
                 child: ListTile(
                   title: Text(m.title),
-                  subtitle: Text('${m.city} · ${m.eventCode} · ${m.dates.map(shortDate).join(', ')}'),
+                  subtitle: Text('${m.city} · ${m.eventCode}${m.allVersions ? ' + all versions' : ''} · ${m.dates.map(shortDate).join(', ')}'),
                   onTap: () => _editMovie(m),
                   leading: IconButton(
                     icon: const Icon(Icons.delete_outline),
@@ -516,6 +520,7 @@ class _MovieDialogState extends State<MovieDialog> {
   late final title = TextEditingController(text: widget.existing?.title ?? '');
   late DateTime start = widget.existing?.startDate ?? _defaultStart();
   late int days = widget.existing?.days ?? 3;
+  late bool allVersions = widget.existing?.allVersions ?? true;
   late final city = TextEditingController(text: widget.existing?.city ?? widget.city);
   String? error;
 
@@ -550,6 +555,7 @@ class _MovieDialogState extends State<MovieDialog> {
         eventCode: p.eventCode,
         slug: p.slug,
         city: c.isEmpty ? (p.city ?? widget.city) : c,
+        allVersions: allVersions,
         startDate: start,
         days: days,
         enabled: widget.existing?.enabled ?? true,
@@ -608,6 +614,15 @@ class _MovieDialogState extends State<MovieDialog> {
               );
               if (d != null) setState(() => start = d);
             },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: allVersions,
+            onChanged: (v) => setState(() => allVersions = v),
+            title: const Text('Watch all languages & formats'),
+            subtitle: const Text(
+                'Also checks the other versions (Tamil, Hindi, 3D, IMAX…) listed '
+                'on this movie\'s BookMyShow page.'),
           ),
           Row(children: [
             const Expanded(child: Text('Days to watch')),

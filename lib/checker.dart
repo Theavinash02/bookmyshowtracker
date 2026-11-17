@@ -124,7 +124,11 @@ class DateCheck {
     this.matchedTheaters = const [],
     this.detail = '',
     this.debug = '',
+    this.version = '',
   });
+
+  /// Event code of the language/format version this result is for.
+  final String version;
   final DateTime date;
   final String url;
   final Outcome outcome;
@@ -136,13 +140,14 @@ class DateCheck {
   /// Diagnostics shown by "Check now" (page size, times, cinemas seen).
   final String debug;
 
-  DateCheck withDebug(String d) => DateCheck(
+  DateCheck withDebug(String d, {String? version}) => DateCheck(
       date: date,
       url: url,
       outcome: outcome,
       matchedTheaters: matchedTheaters,
       detail: detail,
-      debug: d);
+      debug: d,
+      version: version ?? this.version);
 }
 
 /// Human-readable summary of what a fetched page contained.
@@ -283,28 +288,127 @@ Future<FetchedPage> fetchPage(http.Client client, String url) async {
 /// Loads a page and reports its final URL (after redirects).
 typedef PageFetch = Future<FetchedPage> Function(String url);
 
-/// Checks every configured date of [movie].
+/// A language/format version of a movie (its own BookMyShow event code).
+class MovieVersion {
+  const MovieVersion(this.eventCode, this.slug);
+  final String eventCode;
+  final String slug;
+  @override
+  bool operator ==(Object other) =>
+      other is MovieVersion && other.eventCode == eventCode;
+  @override
+  int get hashCode => eventCode.hashCode;
+}
+
+const _versionWords = {
+  'english', 'tamil', 'hindi', 'telugu', 'malayalam', 'kannada', 'bengali',
+  'marathi', 'punjabi', 'gujarati', 'odia', '2d', '3d', 'imax', '4dx', 'ms',
+  'infinity', 'vision', 'dolby', 'cinema', 'screenx', 'ice', 'pxl',
+};
+
+/// Movie name without language/format words: "avengers-doomsday-english"
+/// -> "avengers doomsday".
+String baseMovieName(String slug) {
+  final words = slug.toLowerCase().split('-').where((w) => w.isNotEmpty).toList();
+  while (words.length > 1 && _versionWords.contains(words.last)) {
+    words.removeLast();
+  }
+  return words.join(' ');
+}
+
+/// Movie info page, where BookMyShow lists the movie's versions.
+String movieInfoUrl(Movie m) =>
+    'https://in.bookmyshow.com/movies/${m.city}/${m.slug}/${m.eventCode}';
+
+/// Finds the event codes of all language/format versions of [movie] in its
+/// BookMyShow movie page. Always includes the movie's own code first.
+List<MovieVersion> extractVersions(String html, Movie movie) {
+  final base = baseMovieName(movie.slug).replaceAll(' ', '-');
+  final found = <MovieVersion>{MovieVersion(movie.eventCode, movie.slug)};
+  // Links: /movies/<city>/<slug>/[buytickets/]ET...
+  final linkRe = RegExp(
+      r'/movies/[a-z0-9-]+/([a-z0-9-]+)/(?:buytickets/)?(ET\d{8})',
+      caseSensitive: false);
+  for (final m in linkRe.allMatches(html)) {
+    final slug = m.group(1)!.toLowerCase();
+    if (slug.startsWith(base)) {
+      found.add(MovieVersion(m.group(2)!.toUpperCase(), slug));
+    }
+  }
+  // Embedded data: "eventCode":"ET..." (other movies are filtered out later
+  // by checking the show-times page title).
+  final codeRe = RegExp(
+      r'"(?:eventCode|EventCode|childEventCode|event_code)"\s*:\s*"(ET\d{8})"');
+  for (final m in codeRe.allMatches(html)) {
+    found.add(MovieVersion(m.group(1)!.toUpperCase(), movie.slug));
+  }
+  return found.toList();
+}
+
+/// Discovers [movie]'s versions; on any failure returns just the movie.
+Future<List<MovieVersion>> discoverVersions(PageFetch fetch, Movie movie) async {
+  final own = [MovieVersion(movie.eventCode, movie.slug)];
+  if (!movie.allVersions) return own;
+  try {
+    final page = await fetch(movieInfoUrl(movie));
+    if (page.status >= 400 || looksLikeChallenge(page.body)) return own;
+    // Cap to keep each cycle short.
+    return extractVersions(page.body, movie).take(15).toList();
+  } catch (_) {
+    return own;
+  }
+}
+
+String _pageTitle(String html) =>
+    RegExp(r'<title[^>]*>([^<]*)</title>', caseSensitive: false)
+        .firstMatch(html)
+        ?.group(1) ??
+    '';
+
+/// Checks every configured date of [movie], for each of its [versions]
+/// (defaults to just the movie itself).
 Future<List<DateCheck>> checkMovie({
   required PageFetch fetch,
   required TrackerConfig config,
   required Movie movie,
+  List<MovieVersion>? versions,
 }) async {
   final results = <DateCheck>[];
-  for (final date in movie.dates) {
-    final url = buildShowtimesUrl(
-        config.showtimesTemplate, movie, date);
-    try {
-      final page = await fetch(url);
-      results.add(analyzePage(
-        page: page,
-        movie: movie,
-        date: date,
-        requestedUrl: url,
-        theaters: config.selectedTheaters,
-      ).withDebug(describePage(page)));
-    } catch (e) {
-      results.add(DateCheck(
-          date: date, url: url, outcome: Outcome.error, detail: '$e'));
+  final base = normalize(baseMovieName(movie.slug));
+  for (final v in versions ?? [MovieVersion(movie.eventCode, movie.slug)]) {
+    final isOwn = v.eventCode == movie.eventCode;
+    final vm = movie.copyWith(eventCode: v.eventCode, slug: v.slug);
+    for (final date in movie.dates) {
+      final url = buildShowtimesUrl(config.showtimesTemplate, vm, date);
+      try {
+        final page = await fetch(url);
+        var r = analyzePage(
+          page: page,
+          movie: vm,
+          date: date,
+          requestedUrl: url,
+          theaters: config.selectedTheaters,
+        );
+        // A discovered code could belong to another movie: require the
+        // movie's name in the page title.
+        if (!isOwn &&
+            r.outcome == Outcome.open &&
+            !normalize(_pageTitle(page.body)).contains(base)) {
+          r = DateCheck(
+              date: date,
+              url: url,
+              outcome: Outcome.notOpen,
+              detail: 'Ignored: page is for a different movie.');
+        }
+        results.add(r.withDebug(describePage(page), version: v.eventCode));
+      } catch (e) {
+        results.add(DateCheck(
+            date: date,
+            url: url,
+            outcome: Outcome.error,
+            detail: '$e',
+            version: v.eventCode));
+      }
     }
   }
   return results;

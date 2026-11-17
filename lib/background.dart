@@ -110,6 +110,36 @@ Future<void> _setForeground(ServiceInstance svc, String title, String body) asyn
   }
 }
 
+/// Discovered language/format versions per movie id, refreshed hourly.
+final _versionCache = <String, (DateTime, List<MovieVersion>)>{};
+
+Future<List<MovieVersion>> _versionsFor(PageFetch fetch, Movie m) async {
+  if (!m.allVersions) return [MovieVersion(m.eventCode, m.slug)];
+  final c = _versionCache[m.id];
+  if (c != null && DateTime.now().difference(c.$1) < const Duration(hours: 1)) {
+    return c.$2;
+  }
+  final v = await discoverVersions(fetch, m);
+  _versionCache[m.id] = (DateTime.now(), v);
+  return v;
+}
+
+/// One-line status per date: OPEN if any version is open.
+String summarize(List<DateCheck> results, List<DateTime> dates) =>
+    dates.map((d) {
+      final rs = results.where((r) => r.date == d).toList();
+      final open = rs.where((r) => r.outcome == Outcome.open).toList();
+      if (open.isNotEmpty) {
+        final names = {for (final r in open) ...r.matchedTheaters.map((t) => t.name)};
+        return '${shortDate(d)}: OPEN${names.isEmpty ? '' : ' @ ${names.join(', ')}'}';
+      }
+      if (rs.any((r) => r.outcome == Outcome.blocked)) return '${shortDate(d)}: blocked';
+      if (rs.isNotEmpty && rs.every((r) => r.outcome == Outcome.error)) {
+        return '${shortDate(d)}: error';
+      }
+      return '${shortDate(d)}: not yet';
+    }).join(' · ');
+
 /// One pass over all enabled movies. Fires alarms for new openings.
 Future<void> runOneCycle(
     ServiceInstance svc, PageFetch fetch, TrackerConfig cfg) async {
@@ -128,7 +158,9 @@ Future<void> runOneCycle(
   final watchAll = cfg.alertAnyTheater || cfg.selectedTheaters.isEmpty;
 
   for (final movie in movies) {
-    final results = await checkMovie(fetch: fetch, config: cfg, movie: movie);
+    final versions = await _versionsFor(fetch, movie);
+    final results = await checkMovie(
+        fetch: fetch, config: cfg, movie: movie, versions: versions);
     final open = results.where((r) => r.outcome == Outcome.open).toList();
     anyBlocked |= results.any((r) => r.outcome == Outcome.blocked);
 
@@ -168,20 +200,9 @@ Future<void> runOneCycle(
     }
 
     anyOpen |= open.isNotEmpty;
-    final summary = results.map((r) {
-      switch (r.outcome) {
-        case Outcome.open:
-          return '${shortDate(r.date)}: OPEN'
-              '${r.matchedTheaters.isEmpty ? '' : ' @ ${r.matchedTheaters.map((t) => t.name).join(', ')}'}';
-        case Outcome.notOpen:
-          return '${shortDate(r.date)}: not yet';
-        case Outcome.blocked:
-          return '${shortDate(r.date)}: blocked';
-        case Outcome.error:
-          return '${shortDate(r.date)}: error';
-      }
-    }).join(' · ');
-    lines.add('${movie.title} [${movie.city}] – $summary');
+    final summary = summarize(results, movie.dates);
+    final vCount = versions.length > 1 ? ' (${versions.length} versions)' : '';
+    lines.add('${movie.title} [${movie.city}]$vCount – $summary');
   }
 
   if (newKeys.isNotEmpty) await Storage.addAlertedKeys(newKeys);

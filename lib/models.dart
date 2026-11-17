@@ -17,7 +17,12 @@ class Movie {
     required this.city,
     this.days = 3,
     this.enabled = true,
+    this.allVersions = true,
   });
+
+  /// Also watch every other language/format version of this movie
+  /// (BookMyShow gives each one its own event code).
+  final bool allVersions;
 
   /// BookMyShow city slug this movie is checked in, e.g. "trichy". Taken
   /// from the pasted link, so the same movie can be tracked in two cities.
@@ -57,12 +62,16 @@ class Movie {
     int? days,
     bool? enabled,
     String? city,
+    bool? allVersions,
+    String? eventCode,
+    String? slug,
   }) =>
       Movie(
         title: title ?? this.title,
         url: url,
-        eventCode: eventCode,
-        slug: slug,
+        eventCode: eventCode ?? this.eventCode,
+        slug: slug ?? this.slug,
+        allVersions: allVersions ?? this.allVersions,
         startDate: startDate ?? this.startDate,
         city: city ?? this.city,
         days: days ?? this.days,
@@ -76,6 +85,7 @@ class Movie {
         'slug': slug,
         'startDate': startDate.millisecondsSinceEpoch,
         'city': city,
+        'allVersions': allVersions,
         'days': days,
         'enabled': enabled,
       };
@@ -83,6 +93,7 @@ class Movie {
   /// [fallbackCity] is used for movies saved before cities were per movie.
   factory Movie.fromMap(Map<String, dynamic> m, {String fallbackCity = defaultCity}) => Movie(
         city: (m['city'] as String?) ?? fallbackCity,
+        allVersions: (m['allVersions'] as bool?) ?? true,
         title: m['title'] as String,
         url: m['url'] as String,
         eventCode: m['eventCode'] as String,
