@@ -182,6 +182,25 @@ String describeForReport(
   return b.toString();
 }
 
+/// Per-date state for the app's date chips, keyed by the date's
+/// milliseconds: `open` (at your theaters), `elsewhere` (only at other
+/// theaters), `blocked`, `error` or `waiting`.
+Map<String, String> dateStates(List<DateCheck> results, List<DateTime> dates,
+        [List<Theater> selected = const []]) =>
+    {
+      for (final d in dates)
+        '${d.millisecondsSinceEpoch}': () {
+          final rs = results.where((r) => r.date == d).toList();
+          if (rs.any((r) => isOpenForUser(r, selected))) return 'open';
+          if (rs.any((r) => r.outcome == Outcome.open)) return 'elsewhere';
+          if (rs.any((r) => r.outcome == Outcome.blocked)) return 'blocked';
+          if (rs.isNotEmpty && rs.every((r) => r.outcome == Outcome.error)) {
+            return 'error';
+          }
+          return 'waiting';
+        }(),
+    };
+
 /// One-line status per date. With theaters selected, OPEN only when one of
 /// them has shows; shows elsewhere read "not at your theaters yet".
 String summarize(List<DateCheck> results, List<DateTime> dates,
@@ -224,6 +243,7 @@ Future<void> runOneCycle(
   final newKeys = <String>[];
   final lines = <String>[];
   final report = <String>[];
+  final states = <String, Map<String, String>>{};
   var anyOpen = false;
   var anyBlocked = false;
   final watchAll = cfg.alertAnyTheater || cfg.selectedTheaters.isEmpty;
@@ -288,6 +308,7 @@ Future<void> runOneCycle(
     final summary = summarize(results, movie.dates, cfg.selectedTheaters);
     final vCount = versions.length > 1 ? ' (${versions.length} versions)' : '';
     lines.add('${movie.title} [${movie.city}]$vCount – $summary');
+    states[movie.id] = dateStates(results, movie.dates, cfg.selectedTheaters);
   }
 
   if (newKeys.isNotEmpty) await Storage.addAlertedKeys(newKeys);
@@ -300,6 +321,7 @@ Future<void> runOneCycle(
     'report': ['🕒 Checked ${_hm(now)} · took ${took}s', ...report],
     'open': anyOpen,
     'blocked': anyBlocked,
+    'states': states,
   });
   svc.invoke('status');
 

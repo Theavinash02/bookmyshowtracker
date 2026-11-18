@@ -64,16 +64,16 @@ Your movies and theaters are kept.
 After your first movie, the app offers to **load your city's theaters from
 BookMyShow**. Tick the ones you want.
 
-- **Later:** tap **Load from BookMyShow** under *Theaters*, and paste the link
-  of any movie currently running in your city.
-- **Missing a theater?** Tap **Add theater**. Enter its name and a word from
+- **Later:** tap the **Theaters** card, then **Load from BookMyShow**, and paste
+  the link of any movie currently running in your city.
+- **Missing a theater?** On the Theaters page, tap **+**. Enter its name and a word from
   its BookMyShow name. You can list several spellings separated by `|`, for
   example `Thiruverumbur|Tiruverumbur`.
 - **No theater ticked** means any theater in the city counts.
 
 ### 4. Turn tracking on
 
-Turn on the **switch at the top right** and **Allow** what it asks for:
+Tap **Start tracking** on the big status card and **Allow** what it asks for:
 
 | Permission | Why |
 |---|---|
@@ -97,26 +97,31 @@ That's it. You can close the app.
 - **Tap it** to open the BookMyShow page and book. The alarm never opens
   anything by itself.
 - Each theater rings **once per movie**. To hear it again, go to
-  **Settings → Reset alerts → Save**.
+  **Settings → Reset alerts**.
 
 ### Home screen
 
 | Item | What it shows |
 |---|---|
-| **Status card** | When the last check ran, how long it took, and for each movie and date: **OPEN @ your theater**, **not at your theaters yet**, or **not yet** |
-| **Check now** | Runs a check right away. If one of your theaters has shows that haven't rung yet, it rings too. |
-| **Background report** | Exactly what the background tracker saw: each language/format and date, the theaters with shows, and ✔/✖ for your theaters |
+| **Status card** | Whether tracking is **off**, **watching**, **booking open!**, **paused by your phone** or hit an **error**, with the last check time and the Start/Stop button |
+| **Check now** | Runs a check right away and shows the details. If one of your theaters has shows that haven't rung yet, it rings too. |
+| **Report** | Exactly what the background tracker saw: each language/format and date, the theaters with shows, and ✔/✖ for your theaters |
 | **Test alarm** | Plays the alarm, so you can check the sound and volume |
+| **Movie cards** | One chip per date: **Open** (at your theaters), **Other theaters** (open, but not at yours yet), **Not yet**, or **Blocked** |
+| **Theaters** | How many theaters are ticked. Tap to search, tick, add or load theaters. |
 | **Recent alarms** | The alarms that have rung, with times |
 
 ### Settings
 
 | Setting | What it does |
 |---|---|
-| **Check every … seconds** | How often to check (30–300 s, default 60) |
-| **Also alarm when booking opens at other theaters** | Off by default. Turn it on to also get one alarm when the movie opens at any theater. |
+| **Check every** | How often to check (30–300 s, default 60) |
+| **Also alarm for other theaters** | Off by default. Turn it on to also get one alarm when the movie opens at any theater. |
+| **Test alarm** / **Reset alerts** | Hear the alarm; let theaters that already rang ring again |
 | **Default BookMyShow city** | Used only when a movie link has no city in it |
-| **Reset alerts** | Lets theaters that already rang ring again |
+| **About** | Source code, report a problem |
+
+Tap **Save** at the top right to keep your changes.
 
 ---
 
@@ -132,8 +137,8 @@ Vivo, Realme and OnePlus phones often stop background apps:
 If the home screen says **"⚠ No check for a while"**, the phone paused the
 tracker. Fix the settings above, then turn tracking off and on.
 
-**"BookMyShow HAS shows on another date".** BookMyShow has shows, but not on
-the date you set. Tap the movie and change its date.
+**"Shows on another date" warning.** BookMyShow has shows, but not on the
+date you set. Tap the movie and change its date.
 
 **A theater shows in BookMyShow but not in the tracker.** Check the city in the
 movie's link. Some places have two BookMyShow cities, for example a short name

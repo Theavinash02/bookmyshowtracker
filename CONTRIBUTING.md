@@ -43,7 +43,8 @@ debug key, which is fine for testing.
 
 | File | What it does |
 |---|---|
-| `lib/main.dart` | The whole UI: home screen, movie, theater and settings dialogs, "Check now" |
+| `lib/main.dart` | App start and the home screen: tracking on/off, "Check now", movie list |
+| `lib/ui/` | The other screens and shared widgets: `movie_page.dart`, `theaters_page.dart`, `settings_page.dart`, `report_page.dart`, `widgets.dart` (status card, movie card, date chips) and `theme.dart` (colours, light/dark) |
 | `lib/background.dart` | Foreground service that runs a check every *N* seconds and rings alarms |
 | `lib/checker.dart` | Pure logic: parse BookMyShow links, build show-time URLs, find theaters and dates in a page, decide what is "open". Most of the tests cover this file. |
 | `lib/web_fetcher.dart` | Hidden in-app browser (`flutter_inappwebview`) that loads BookMyShow pages like a real user |

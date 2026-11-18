@@ -1,4 +1,4 @@
-import 'package:bms_tracker/background.dart' show describeForReport, summarize;
+import 'package:bms_tracker/background.dart' show dateStates, describeForReport, summarize;
 import 'package:bms_tracker/checker.dart';
 import 'package:bms_tracker/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -475,6 +475,13 @@ void main() {
       // With no theater selected, any theater counts.
       expect(isOpenForUser(r, const []), isTrue);
       expect(summarize([r], [DateTime(2026, 12, 17)]), '17 Dec: OPEN');
+      // Date chips: shows elsewhere vs. at your theaters; no result = waiting.
+      final d17 = DateTime(2026, 12, 17), d18 = DateTime(2026, 12, 18);
+      expect(dateStates([r], [d17, d18], cfg.selectedTheaters), {
+        '${d17.millisecondsSinceEpoch}': 'elsewhere',
+        '${d18.millisecondsSinceEpoch}': 'waiting',
+      });
+      expect(dateStates([r], [d17]).values.single, 'open');
     });
   });
 
