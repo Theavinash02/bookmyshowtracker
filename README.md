@@ -188,8 +188,9 @@ flutter test
 flutter build apk --release
 ```
 
-The APK is written to `build/app/outputs/flutter-apk/app-release.apk`. Every
-merge to `main` builds the APK and publishes it as a new GitHub release.
+The APK is written to `build/app/outputs/flutter-apk/app-release.apk`. A new
+GitHub release is published whenever a merge to `main` raises the version in
+`pubspec.yaml` (see [CONTRIBUTING.md](CONTRIBUTING.md#releases-maintainers)).
 
 ## Disclaimer
 

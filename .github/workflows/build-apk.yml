@@ -65,30 +65,36 @@ jobs:
           name: bms-tracker-apk
           path: bms-tracker.apk
 
-      - name: Read app version
+      # A release is published only when pubspec.yaml has a version that
+      # has no release yet. Other merges to main are built and tested only.
+      - name: Check for a new version
         if: github.ref == 'refs/heads/main'
         id: ver
         run: |
           v=$(grep '^version:' pubspec.yaml | sed -e 's/^version:[[:space:]]*//' -e 's/+.*//')
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$v" >/dev/null; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$v is already released. Raise 'version:' in pubspec.yaml to publish a new release."
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
 
-      # One new release per build of main, tagged at the exact commit, so
-      # .../releases/latest always points at the newest APK.
       - name: Publish release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.ver.outputs.new == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.ver.outputs.version }}-build${{ github.run_number }}
+          tag_name: v${{ steps.ver.outputs.version }}
           target_commitish: ${{ github.sha }}
-          name: BMS Tracker v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})
+          name: BMS Tracker v${{ steps.ver.outputs.version }}
           prerelease: false
           make_latest: true
           files: bms-tracker.apk
+          generate_release_notes: true
           body: |
             Download **bms-tracker.apk** on your Android phone and install it
             (allow "Install unknown apps" for your browser when asked).
+            It installs over the previous version and keeps your settings.
 
             Always-newest direct link:
             https://github.com/${{ github.repository }}/releases/latest/download/bms-tracker.apk
-
-            Built from ${{ github.sha }}.
