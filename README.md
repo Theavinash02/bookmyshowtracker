@@ -7,6 +7,7 @@ theaters you want, on the dates you want.
 [![Build APK](https://github.com/Theavinash02/bookmyshowtracker/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Theavinash02/bookmyshowtracker/actions/workflows/build-apk.yml)
 [![Latest release](https://img.shields.io/github/v/release/Theavinash02/bookmyshowtracker?label=download)](https://github.com/Theavinash02/bookmyshowtracker/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Sponsor](https://img.shields.io/github/sponsors/Theavinash02?label=sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/Theavinash02)
 
 <!-- Screenshots: added after the UI redesign. -->
 
@@ -177,6 +178,15 @@ the code is organised and how to send a pull request.
 - 🐞 [Report a bug](https://github.com/Theavinash02/bookmyshowtracker/issues/new?template=bug_report.yml)
 - 💡 [Suggest a feature](https://github.com/Theavinash02/bookmyshowtracker/issues/new?template=feature_request.yml)
 - 🏙️ [My city or theater doesn't work](https://github.com/Theavinash02/bookmyshowtracker/issues/new?template=city_or_theater.yml)
+
+## ❤️ Support this project
+
+BMS Tracker is free, open source and has no ads. If it helped you get your
+first-day-first-show ticket, you can support its development:
+
+**[❤️ Sponsor on GitHub](https://github.com/sponsors/Theavinash02)**
+
+Starring the repo ⭐ and sharing it with friends helps too.
 
 ## Build it yourself
 
