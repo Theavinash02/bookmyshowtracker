@@ -1,112 +1,115 @@
-# BMS Tracker
+# 🎟️ BMS Tracker
 
-**Get an alarm on your phone the moment BookMyShow opens bookings for a movie at
-the theaters you want, on the dates you want.**
+**Never miss a first-day-first-show again.** BMS Tracker rings an alarm on
+your Android phone the moment BookMyShow opens bookings for a movie at the
+theaters you want, on the dates you want.
 
-You add a movie, tick your theaters and pick your dates. The app then checks
-BookMyShow about once a minute in the background. As soon as one of your
-theaters has shows on one of your dates, your phone rings like an alarm clock.
-Tap the notification and you go straight to that BookMyShow page to book.
+[![Build APK](https://github.com/Theavinash02/bookmyshowtracker/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Theavinash02/bookmyshowtracker/actions/workflows/build-apk.yml)
+[![Latest release](https://img.shields.io/github/v/release/Theavinash02/bookmyshowtracker?label=download)](https://github.com/Theavinash02/bookmyshowtracker/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- Works for **any movie**, in every **language and format** (2D, 3D, IMAX,
-  MS-Infinity…). You don't have to choose one.
-- Alarms only for **your theaters** and **your dates**. Shows anywhere else
-  don't wake you up.
-- Rings with your **alarm ringtone**, even on silent, until you dismiss it.
-- Keeps working with the screen off, and starts again after the phone restarts.
+<!-- Screenshots: added after the UI redesign. -->
 
-> Android only. Made for Trichy (Tiruchirappalli) and works for other
-> BookMyShow cities too.
+## Features
+
+- **Any movie, any city.** Works wherever BookMyShow sells tickets.
+- **Every language and format** (2D, 3D, IMAX, 4DX…) is checked
+  automatically. You add the movie once.
+- **Only your theaters, only your dates.** Shows anywhere else don't wake
+  you up.
+- **Rings like an alarm clock**, even on silent, until you dismiss it.
+- **Runs in the background** with the screen off, and starts again after the
+  phone restarts.
+- **Tap the alarm to book.** It opens that BookMyShow page directly.
+
+> **Android only.** BMS Tracker is an independent, open-source project. It is
+> not affiliated with, endorsed by or connected to BookMyShow (Bigtree
+> Entertainment). See [Disclaimer](#disclaimer).
 
 ---
 
-## 1. Install
+## Quick start
 
-1. On your Android phone, open this link. It always downloads the newest
-   version:
-   **<https://github.com/Theavinash02/bookmyshowtracker/releases/latest/download/bms-tracker.apk>**
-2. Open the downloaded **bms-tracker.apk** and tap **Install**. If Android
-   asks, allow **"Install unknown apps"** for your browser.
+### 1. Install
+
+On your Android phone, open this link. It always downloads the newest version:
+
+**<https://github.com/Theavinash02/bookmyshowtracker/releases/latest/download/bms-tracker.apk>**
+
+Open **bms-tracker.apk** and tap **Install**. If Android asks, allow
+**"Install unknown apps"** for your browser.
 
 **To update later,** open the same link again and install over the old app.
 Your movies and theaters are kept.
 
-## 2. Allow what the app needs
+> **Coming from version 0.3 or older?** Version 0.4 has a new app ID and a
+> permanent signing key. Uninstall the old **BMS Tracker** once, then install
+> the new one and add your movies again. After that, updates install normally.
 
-The first time you turn tracking on, the app asks for these. Say **Allow** to
-all of them:
+### 2. Add a movie
+
+1. In the **BookMyShow** app or website, choose your city and open the movie.
+2. Copy its link. In the **app**, tap **Share → Copy link**. On the
+   **website**, copy the address bar.
+   The link must contain a code like `ET00439706`, for example
+   `https://in.bookmyshow.com/movies/<city>/<movie>/ET00439706`.
+3. In BMS Tracker, tap **+ Movie** and paste the link. The title and city fill
+   in by themselves.
+4. Pick the **show date** and **how many days** to watch. For example,
+   17 Dec and 2 days watches 17 and 18 Dec.
+5. Tap **Save**.
+
+### 3. Pick your theaters
+
+After your first movie, the app offers to **load your city's theaters from
+BookMyShow**. Tick the ones you want.
+
+- **Later:** tap **Load from BookMyShow** under *Theaters*, and paste the link
+  of any movie currently running in your city.
+- **Missing a theater?** Tap **Add theater**. Enter its name and a word from
+  its BookMyShow name. You can list several spellings separated by `|`, for
+  example `Thiruverumbur|Tiruverumbur`.
+- **No theater ticked** means any theater in the city counts.
+
+### 4. Turn tracking on
+
+Turn on the **switch at the top right** and **Allow** what it asks for:
 
 | Permission | Why |
 |---|---|
 | **Notifications** | To show the alarm |
 | **Ignore battery optimisation** | So Android doesn't stop the checks when the screen is off |
 
-Also turn up your phone's **alarm volume**. The alarm uses the alarm volume,
-not the ringtone or media volume.
-
-## 3. Add a movie
-
-1. Open the **BookMyShow** app or website and choose your city (for Trichy,
-   choose **Trichy**).
-2. Open the movie and copy its link:
-   - **App:** tap **Share**, then **Copy link**.
-   - **Website:** copy the address from the address bar.
-
-   The link must contain a code like `ET00439706`. Either the movie page or
-   the "Book tickets" page works, for example
-   `https://in.bookmyshow.com/movies/trichy/avengers-doomsday/ET00439706`.
-3. In BMS Tracker, tap **+ Movie** and paste the link. The title and city fill
-   in by themselves.
-4. Set the **Show date** and **Days to watch**. For example, set 17 Dec and
-   2 days to watch 17 and 18 Dec.
-5. Tap **Save**.
-
-You don't need to add each language separately. The app finds all
-languages and formats of the movie by itself.
-
-## 4. Pick your theaters
-
-Under **Theaters**, tick the cinemas you want. Common Trichy cinemas are listed
-already.
-
-- **Missing a theater?** Tap **Add theater** and enter its name and a word from
-  its BookMyShow name, for example `Thiruverumbur`. You can give several
-  spellings separated by `|`, for example `Thiruverumbur|Tiruverumbur`.
-- **Want BookMyShow's exact list?** Tap **Load from BookMyShow**, paste the link
-  of any movie currently running in your city, and tick the theaters you want.
-- **No theater ticked** means any theater counts.
-
-## 5. Turn tracking on
-
-Turn on the **switch at the top right**. A small **"BMS Tracker – watching…"**
-notification appears and stays while tracking is on. Leave it there.
-
-Then tap **Test alarm** to hear what the alarm sounds like.
+A small **"BMS Tracker – watching…"** notification stays while tracking is on.
+Tap **Test alarm** to hear it, and turn up your **alarm volume**. The alarm
+uses the alarm volume, not the ringtone or media volume.
 
 That's it. You can close the app.
 
 ---
 
-## When the alarm rings
+## Using the app
 
-- The phone rings with your alarm ringtone, and a notification says
-  **"BOOKING OPEN!"** with the theater, date and language/format.
-- The alarm only rings. It **doesn't open anything** by itself.
-- **Tap the notification** to open that BookMyShow page and book.
-- Each theater rings **once per movie**. To hear it again, go to **Settings**,
-  tap **Reset alerts**, then **Save**.
+### When the alarm rings
 
-## The home screen
+- The notification says **"BOOKING OPEN!"** with the theater, date and
+  language/format.
+- **Tap it** to open the BookMyShow page and book. The alarm never opens
+  anything by itself.
+- Each theater rings **once per movie**. To hear it again, go to
+  **Settings → Reset alerts → Save**.
+
+### Home screen
 
 | Item | What it shows |
 |---|---|
 | **Status card** | When the last check ran, how long it took, and for each movie and date: **OPEN @ your theater**, **not at your theaters yet**, or **not yet** |
-| **Check now** | Runs a check right away and shows the details. If one of your theaters has shows that haven't rung yet, it rings too. |
-| **Background report** | Exactly what the background tracker saw on its last check: each language/format and date, the theaters with shows, and ✔ or ✖ for each of your theaters |
+| **Check now** | Runs a check right away. If one of your theaters has shows that haven't rung yet, it rings too. |
+| **Background report** | Exactly what the background tracker saw: each language/format and date, the theaters with shows, and ✔/✖ for your theaters |
 | **Test alarm** | Plays the alarm, so you can check the sound and volume |
 | **Recent alarms** | The alarms that have rung, with times |
 
-## Settings
+### Settings
 
 | Setting | What it does |
 |---|---|
@@ -117,53 +120,83 @@ That's it. You can close the app.
 
 ---
 
-## Tips and troubleshooting
+## Troubleshooting
 
-**Keep the app running in the background.** Samsung, Xiaomi/Redmi, Oppo,
-Vivo, Realme and OnePlus phones often stop background apps. Do this:
+**The tracker stops when the screen is off.** Samsung, Xiaomi/Redmi, Oppo,
+Vivo, Realme and OnePlus phones often stop background apps:
 
-- Settings → Apps → **BMS Tracker** → Battery → **Unrestricted** (or "No restrictions").
+- Settings → Apps → **BMS Tracker** → Battery → **Unrestricted**.
 - Turn on **Autostart** if your phone has it.
 - Don't swipe away the "watching" notification.
 
 If the home screen says **"⚠ No check for a while"**, the phone paused the
 tracker. Fix the settings above, then turn tracking off and on.
 
-**"BookMyShow HAS shows on another date"**: BookMyShow has shows, but not on
+**"BookMyShow HAS shows on another date".** BookMyShow has shows, but not on
 the date you set. Tap the movie and change its date.
 
-**Movie shows at a theater in the BookMyShow app but not in the tracker**:
-check the city. BookMyShow has two cities for Trichy: **"Trichy"**
-(`/movies/trichy/…`, with all cinemas) and **"Tiruchirappalli"** (only a few).
-Use a link with `trichy`. You can add the same movie twice, once with each
-link, to watch both.
+**A theater shows in BookMyShow but not in the tracker.** Check the city in the
+movie's link. Some places have two BookMyShow cities, for example a short name
+and a full name. One of them may list fewer cinemas. Use the city the
+BookMyShow app shows, or add the movie once for each city.
 
-**BLOCKED**: BookMyShow refused the request. Switch between Wi-Fi and mobile
-data and try **Check now** again.
+**BLOCKED.** BookMyShow refused the request. Switch between Wi-Fi and mobile
+data and try **Check now** again, or raise the check interval.
 
-**No sound**: tap **Test alarm**. If it's silent, turn up the alarm volume
-and check that notifications for BMS Tracker are allowed.
+**No sound.** Tap **Test alarm**. If it's silent, turn up the alarm volume and
+check that notifications for BMS Tracker are allowed.
+
+**"App not installed" when updating.** You have a version older than 0.4.
+Uninstall it once, then install the new one.
+
+Still stuck? [Open an issue](https://github.com/Theavinash02/bookmyshowtracker/issues/new/choose)
+and paste the **Background report**.
 
 ---
 
 ## How it works
 
-The app checks each movie's BookMyShow "Book tickets" page for every date you
-chose, using a hidden browser inside the app. That's why it works with
-BookMyShow's bot protection. It finds the movie's other languages and formats
-by pressing "Book tickets" on the movie page, the way you would. A date counts
-as open only if BookMyShow lists shows **on that exact date**. A theater counts
-only if BookMyShow lists it **with shows**.
+The app opens each movie's BookMyShow "Book tickets" page for every date you
+chose, in a hidden browser inside the app, the same way you would. That's why
+it works with BookMyShow's bot protection. It finds the movie's other
+languages and formats by pressing "Book tickets" on the movie page. A date
+counts as open only if BookMyShow lists shows **on that exact date**. A theater
+counts only if BookMyShow lists it **with shows**.
+
+## Contributing
+
+Contributions are welcome: bug reports, theater-matching fixes, UI ideas and
+code. Read **[CONTRIBUTING.md](CONTRIBUTING.md)** for how to build the app, how
+the code is organised and how to send a pull request.
+
+- 🐞 [Report a bug](https://github.com/Theavinash02/bookmyshowtracker/issues/new?template=bug_report.yml)
+- 💡 [Suggest a feature](https://github.com/Theavinash02/bookmyshowtracker/issues/new?template=feature_request.yml)
+- 🏙️ [My city or theater doesn't work](https://github.com/Theavinash02/bookmyshowtracker/issues/new?template=city_or_theater.yml)
 
 ## Build it yourself
 
 Requires the Flutter SDK (3.50 or newer) and Java 21.
 
-```
+```sh
 flutter pub get
 flutter test
 flutter build apk --release
 ```
 
 The APK is written to `build/app/outputs/flutter-apk/app-release.apk`. Every
-merge to `main` also builds the APK and publishes it as a new GitHub release.
+merge to `main` builds the APK and publishes it as a new GitHub release.
+
+## Disclaimer
+
+BMS Tracker is an unofficial personal tool. It is not affiliated with,
+endorsed by or connected to BookMyShow or Bigtree Entertainment Pvt. Ltd.
+"BookMyShow" is a trademark of its owner. The app only reads public show-time
+pages, at the interval you choose, and never books, buys or resells tickets.
+Use it responsibly, keep the check interval reasonable, and follow
+BookMyShow's terms of use. You use it at your own risk.
+
+## License
+
+[MIT](LICENSE). Bundles a patched copy of
+[flutter_inappwebview_android](third_party/flutter_inappwebview_android)
+(Apache-2.0).

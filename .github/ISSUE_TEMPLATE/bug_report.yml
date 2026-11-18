@@ -1,0 +1,57 @@
+name: 🐞 Bug report
+description: Something doesn't work, like no alarm, a wrong alarm, a crash or a "BLOCKED" error.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please check the README's
+        [Troubleshooting](https://github.com/Theavinash02/bookmyshowtracker#troubleshooting)
+        section first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Added movie with link ...
+        2. Ticked theater ...
+        3. ...
+  - type: input
+    id: link
+    attributes:
+      label: BookMyShow movie link
+      placeholder: https://in.bookmyshow.com/movies/<city>/<movie>/ET00...
+  - type: textarea
+    id: report
+    attributes:
+      label: Background report
+      description: Home screen → **Background report** → long-press to copy, then paste here.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown on the release you downloaded, e.g. v0.4.0 (build 25).
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: e.g. Redmi Note 13, Android 14
+    validations:
+      required: true
+  - type: checkboxes
+    id: battery
+    attributes:
+      label: Background settings
+      options:
+        - label: Battery for BMS Tracker is set to "Unrestricted"
+        - label: The "BMS Tracker – watching…" notification was showing

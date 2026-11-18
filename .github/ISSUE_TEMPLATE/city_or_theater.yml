@@ -1,0 +1,35 @@
+name: 🏙️ My city or theater doesn't work
+description: A theater isn't found, theaters don't load, or the city is wrong.
+labels: [city-or-theater]
+body:
+  - type: input
+    id: city
+    attributes:
+      label: City
+      description: As it appears in BookMyShow links (the word after /movies/).
+      placeholder: e.g. chennai
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: BookMyShow link of a movie running there
+      placeholder: https://in.bookmyshow.com/movies/<city>/<movie>/ET00...
+    validations:
+      required: true
+  - type: input
+    id: theater
+    attributes:
+      label: Theater name exactly as BookMyShow shows it
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens?
+      placeholder: e.g. "Load from BookMyShow" finds no theaters, or my theater never shows ✔.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Background report (if any)
+      render: text

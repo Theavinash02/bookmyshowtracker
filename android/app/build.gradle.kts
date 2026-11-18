@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.trichy.bms_tracker"
+    namespace = "io.github.theavinash02.bmstracker"
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
@@ -16,8 +16,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.trichy.bms_tracker"
+        applicationId = "io.github.theavinash02.bmstracker"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -30,11 +29,25 @@ android {
         versionName = flutter.versionName
     }
 
+    // Release builds are signed with the permanent key when CI provides it
+    // (see CONTRIBUTING.md), so every update installs over the old app.
+    // Local builds and forks fall back to the debug key.
+    val keystorePath = System.getenv("BMS_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("BMS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("BMS_KEY_ALIAS")
+                keyPassword = System.getenv("BMS_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(
+                if (keystorePath != null) "release" else "debug")
         }
     }
 }

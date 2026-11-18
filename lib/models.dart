@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'checker.dart' show defaultShowtimesTemplate;
 
-/// BookMyShow has two cities for Trichy: "tiruchirappalli" lists only a few
-/// cinemas, "trichy" (what the BookMyShow app uses) lists them all.
-const defaultCity = 'trichy';
+/// No city until the user adds a movie: the city comes from its link
+/// (`/movies/<city>/...`) or from Settings.
+const defaultCity = '';
 
 /// A movie being tracked on BookMyShow.
 class Movie {
@@ -24,7 +24,7 @@ class Movie {
   /// (BookMyShow gives each one its own event code).
   final bool allVersions;
 
-  /// BookMyShow city slug this movie is checked in, e.g. "trichy". Taken
+  /// BookMyShow city slug this movie is checked in, e.g. "chennai". Taken
   /// from the pasted link, so the same movie can be tracked in two cities.
   final String city;
 
@@ -147,7 +147,7 @@ class TrackerConfig {
     this.showtimesTemplate = defaultShowtimesTemplate,
   });
 
-  /// BookMyShow city slug, e.g. "trichy".
+  /// BookMyShow city slug, e.g. "chennai".
   final String city;
   final List<Movie> movies;
   final List<Theater> theaters;
