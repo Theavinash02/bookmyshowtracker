@@ -262,6 +262,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final list = [...c.movies.where((x) => x.id != m.id), m];
     await _save(c.copyWith(movies: list));
     if (existed) _snack('${m.title} in ${m.city} was already added – updated it.');
+    if (cfg!.city.isEmpty) await _save(cfg!.copyWith(city: m.city));
+    if (!mounted) return;
+    if (cfg!.theaters.isEmpty) {
+      final load = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Pick your theaters?'),
+          content: Text('Load the list of ${m.city} theaters from BookMyShow '
+              'and tick the ones you want. Without any ticked theater, the '
+              'alarm rings when booking opens anywhere in the city.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Later')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Load theaters')),
+          ],
+        ),
+      );
+      if (load == true) await _loadTheatersFromBms(fromLink: m.url);
+    }
   }
 
   Future<void> _editMovie(Movie m) async {
@@ -294,16 +316,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         theaters: cfg!.theaters.where((x) => x.id != t.id).toList()));
   }
 
-  Future<void> _loadTheatersFromBms() async {
+  Future<void> _loadTheatersFromBms({String? fromLink}) async {
     final ctrl = TextEditingController();
-    final url = await showDialog<String>(
+    final url = fromLink ?? await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Load theaters from BookMyShow'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text(
               'Paste the BookMyShow link of ANY movie that is running in '
-              'Trichy today (movie page or "Book tickets" page).'),
+              'your city today (movie page or "Book tickets" page).'),
           TextField(
               controller: ctrl,
               decoration: const InputDecoration(labelText: 'BookMyShow link')),
@@ -413,7 +435,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         (stTime == null || !errTime.isBefore(stTime));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BMS Tracker · Trichy'),
+        title: const Text('BMS Tracker'),
         actions: [
           IconButton(onPressed: _settings, icon: const Icon(Icons.settings)),
           Switch(value: running, onChanged: _toggle),
@@ -508,7 +530,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           await showTicketsOpenAlarm(
                               title: '🎟️ Test alarm',
                               body: 'This is how the alert will look and sound.',
-                              url: 'https://in.bookmyshow.com/explore/movies-${c.city}');
+                              url: c.city.isEmpty
+                                  ? 'https://in.bookmyshow.com/'
+                                  : 'https://in.bookmyshow.com/explore/movies-${c.city}');
                         },
                         icon: const Icon(Icons.alarm),
                         label: const Text('Test alarm'),
@@ -593,7 +617,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   icon: const Icon(Icons.add),
                   label: const Text('Add theater')),
               TextButton.icon(
-                  onPressed: _loadTheatersFromBms,
+                  onPressed: () => _loadTheatersFromBms(),
                   icon: const Icon(Icons.download),
                   label: const Text('Load from BookMyShow')),
             ]),
@@ -652,6 +676,12 @@ class _MovieDialogState extends State<MovieDialog> {
           'Link must contain the movie code (ET00…). Copy it from the movie page on BookMyShow.');
       return;
     }
+    if (c.isEmpty && p.city == null && widget.city.isEmpty) {
+      setState(() => error =
+          'Enter your BookMyShow city below (the word after /movies/ in '
+          'a BookMyShow link, e.g. "chennai").');
+      return;
+    }
     Navigator.pop(
       context,
       Movie(
@@ -682,7 +712,7 @@ class _MovieDialogState extends State<MovieDialog> {
             decoration: InputDecoration(
               labelText: 'BookMyShow movie link',
               hintText:
-                  'https://in.bookmyshow.com/movies/trichy/<movie>/ET00…',
+                  'https://in.bookmyshow.com/movies/<city>/<movie>/ET00…',
               errorText: error,
               errorMaxLines: 3,
               helperText:
@@ -699,8 +729,8 @@ class _MovieDialogState extends State<MovieDialog> {
               decoration: const InputDecoration(
                   labelText: 'BookMyShow city',
                   helperText:
-                      'Filled from the link. Add the same movie again with another '
-                      'city (e.g. trichy and tiruchirappalli) to watch both.',
+                      'Filled from the link. Some places have two BookMyShow '
+                      'cities; add the movie once for each to watch both.',
                   helperMaxLines: 3)),
           const SizedBox(height: 12),
           ListTile(

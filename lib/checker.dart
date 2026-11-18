@@ -25,7 +25,7 @@ class ParsedMovieUrl {
   final String eventCode;
   final String slug;
 
-  /// City slug from the link ("trichy" in /movies/trichy/...), if present.
+  /// City slug from the link ("chennai" in /movies/chennai/...), if present.
   final String? city;
 
   String get suggestedTitle => slug
@@ -294,7 +294,7 @@ String versionFormat(String body, String eventCode) {
 }
 
 /// Human name of a show-times page's version, from its title:
-/// "Avengers: Doomsday - (Tamil) Movie Showtimes in Trichy & ..." ->
+/// "Avengers: Doomsday - (Tamil) Movie Showtimes in <City> & ..." ->
 /// "Avengers: Doomsday - (Tamil)". Empty if unknown.
 String versionLabel(String html) {
   final t = _pageTitle(html).replaceAll('&amp;', '&').trim();

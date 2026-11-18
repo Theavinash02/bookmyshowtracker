@@ -1,4 +1,4 @@
-package com.trichy.bms_tracker
+package io.github.theavinash02.bmstracker
 
 import io.flutter.embedding.android.FlutterActivity
 

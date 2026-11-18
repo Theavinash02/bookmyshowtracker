@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How to use BMS Tracker
+    url: https://github.com/Theavinash02/bookmyshowtracker#quick-start
+    about: Install, add a movie, pick theaters and troubleshooting.

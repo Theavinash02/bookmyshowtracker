@@ -29,6 +29,32 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+
+      # Sign with the permanent key so updates install over the old app.
+      # Branch builds without the secrets (e.g. forks) use the debug key;
+      # a release from main must never be signed with it.
+      - name: Set up signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+              echo "::error::Signing secrets are missing; see CONTRIBUTING.md." && exit 1
+            fi
+            echo "::warning::No signing secrets: building with the debug key."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          {
+            echo "BMS_KEYSTORE_PATH=$RUNNER_TEMP/release.p12"
+            echo "BMS_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "BMS_KEY_ALIAS=$KEY_ALIAS"
+            echo "BMS_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
       - run: flutter build apk --release
 
       - name: Rename APK

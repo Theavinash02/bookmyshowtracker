@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
-import 'theaters_trichy.dart';
 
 /// Persistent storage. Uses [SharedPreferencesAsync] (no in-memory cache),
 /// so the UI and the background service always see each other's writes.
@@ -19,34 +18,10 @@ class Storage {
     final s = await _p.getString(_kConfig);
     if (s == null) return defaultConfig();
     try {
-      return await _addNewDefaultTheaters(TrackerConfig.fromJson(s));
+      return TrackerConfig.fromJson(s);
     } catch (_) {
       return defaultConfig();
     }
-  }
-
-  static const _kDefaultsVersion = 'defaults_version';
-  static const _defaultsVersion = 6;
-
-  /// Adds theaters introduced in app updates (once, so deletions stick).
-  static Future<TrackerConfig> _addNewDefaultTheaters(TrackerConfig c) async {
-    final v = (await _p.getInt(_kDefaultsVersion)) ?? 1;
-    if (v >= _defaultsVersion) return c;
-    final have = c.theaters.map((t) => t.id).toSet();
-    final added = defaultTrichyTheaters().where((t) => !have.contains(t.id));
-    var updated = c.copyWith(theaters: [...added, ...c.theaters]);
-    // v4: the "tiruchirappalli" city misses most Trichy cinemas.
-    if (v < 4 && c.city == 'tiruchirappalli') {
-      updated = updated.copyWith(city: defaultCity);
-    }
-    // v5: alarms only for the selected theaters by default.
-    if (v < 5) updated = updated.copyWith(alertAnyTheater: false);
-    // v6: earlier builds could ring for a theater that only appeared in
-    // page data without shows; forget those so the real opening rings.
-    if (v < 6) await clearAlerted();
-    await saveConfig(updated);
-    await _p.setInt(_kDefaultsVersion, _defaultsVersion);
-    return updated;
   }
 
   static Future<void> saveConfig(TrackerConfig c) =>
@@ -100,9 +75,10 @@ class Storage {
       _p.setString(_kStatus, jsonEncode(status));
 }
 
-// Fresh installs already contain the latest defaults.
+/// A fresh install: no city, movies or theaters yet. The city comes from
+/// the first movie link and theaters are loaded from BookMyShow.
 TrackerConfig defaultConfig() => TrackerConfig(
       city: defaultCity,
       movies: [],
-      theaters: defaultTrichyTheaters(),
+      theaters: [],
     );
