@@ -294,7 +294,7 @@ String versionFormat(String body, String eventCode) {
 }
 
 /// Human name of a show-times page's version, from its title:
-/// "Avengers: Doomsday - (Tamil) Movie Showtimes in <City> & ..." ->
+/// "Avengers: Doomsday - (Tamil) Movie Showtimes in Chennai & ..." ->
 /// "Avengers: Doomsday - (Tamil)". Empty if unknown.
 String versionLabel(String html) {
   final t = _pageTitle(html).replaceAll('&amp;', '&').trim();
