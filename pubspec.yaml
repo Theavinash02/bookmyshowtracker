@@ -1,7 +1,7 @@
 name: bms_tracker
 description: "Rings an alarm when BookMyShow opens bookings at your chosen theaters."
 publish_to: 'none'
-version: 0.4.0+21
+version: 0.5.0+22
 
 environment:
   sdk: ^3.14.0

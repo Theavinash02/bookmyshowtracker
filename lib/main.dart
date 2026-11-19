@@ -9,6 +9,12 @@ import 'checker.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'storage.dart';
+import 'ui/movie_page.dart';
+import 'ui/report_page.dart';
+import 'ui/settings_page.dart';
+import 'ui/theaters_page.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 import 'web_fetcher.dart';
 
 Future<void> main() async {
@@ -24,8 +30,6 @@ Future<void> main() async {
   runApp(const TrackerApp());
 }
 
-const bmsRed = Color(0xFFE7394D);
-
 class TrackerApp extends StatelessWidget {
   const TrackerApp({super.key});
 
@@ -34,11 +38,8 @@ class TrackerApp extends StatelessWidget {
     return MaterialApp(
       title: 'BMS Tracker',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: bmsRed, useMaterial3: true),
-      darkTheme: ThemeData(
-          colorSchemeSeed: bmsRed,
-          brightness: Brightness.dark,
-          useMaterial3: true),
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
       home: const HomePage(),
     );
   }
@@ -110,8 +111,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (running) service.invoke('checkNow');
   }
 
-  void _snack(String msg) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(msg)));
+  void _snack(String msg, {SnackBarAction? action}) =>
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg), action: action));
 
   /// True when the last check is much older than one interval plus the
   /// time a check takes, i.e. the background tracker probably stopped.
@@ -147,6 +149,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _testAlarm() async {
+    await _askPermissions();
+    final city = cfg!.city;
+    await showTicketsOpenAlarm(
+        title: '🎟️ Test alarm',
+        body: 'This is how the alert will look and sound.',
+        url: city.isEmpty
+            ? 'https://in.bookmyshow.com/'
+            : 'https://in.bookmyshow.com/explore/movies-$city');
+  }
+
   Future<void> _testNow() async {
     final c = cfg!;
     final movies = c.movies.where((m) => m.enabled).toList();
@@ -156,7 +169,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     setState(() => testing = true);
     final loader = PageLoader();
-    final report = <Widget>[];
+    final sections = <Widget>[];
     final started = DateTime.now();
     final alerted = await Storage.alertedKeys();
     final ringing = <String>[];
@@ -191,87 +204,71 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           await Storage.logAlarm('${m.title} (${m.city}): ${parts.join('; ')} [Check now]');
           ringing.addAll(fresh.values.map((t) => t.name));
         }
-        report.add(Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(
-              '${m.title} · ${m.city}\n'
-              'Languages/formats found: ${versions.length} (${versions.map((v) => v.eventCode).join(', ')})',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-        ));
-        for (final r in res) {
-          final label = switch (r.outcome) {
-            Outcome.open when !isOpenForUser(r, c.selectedTheaters) =>
-              'Not at your theaters yet',
-            Outcome.open => 'OPEN',
-            Outcome.notOpen => 'Not open yet',
-            Outcome.blocked => 'BLOCKED',
-            Outcome.error => 'ERROR',
-          };
-          report.add(ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text('${r.label.isNotEmpty ? '${r.label} · ' : r.version.isEmpty ? '' : '${r.version} · '}'
-                '${r.format.isNotEmpty ? '${r.format} · ' : ''}${shortDate(r.date)} – $label'
-                '${r.venues.isEmpty ? '' : '\nTheaters with shows: ${r.venues.join(' | ')}'}'
-                '${r.matchedTheaters.isEmpty ? '' : '\nYour theaters: ${r.matchedTheaters.map((t) => '${t.name} (${alerted.contains('${m.id}|${t.id}') ? 'alarm already rang earlier' : 'alarm ringing now'})').join(', ')}'}'),
-            subtitle: SelectableText('${r.detail}\n${r.debug}'),
-            onTap: () => openBookMyShow(r.url),
-          ));
-        }
+        sections.add(_CheckResultCard(
+            movie: m,
+            versions: versions.map((v) => v.eventCode).toList(),
+            results: res,
+            cfg: c,
+            alerted: alerted));
       }
     } catch (e) {
-      report.add(Text('Check failed: $e', style: const TextStyle(color: Colors.red)));
+      sections.add(InfoBanner(icon: Icons.error_outline, text: 'Check failed: $e'));
     } finally {
       await loader.close();
       if (mounted) setState(() => testing = false);
     }
     if (!mounted) return;
     final took = DateTime.now().difference(started).inSeconds;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Check result · ${took}s'),
-        content: SingleChildScrollView(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                      ringing.isEmpty
-                          ? 'Each theater rings once per movie (Settings → Reset alerts '
-                              'to ring again).'
-                          : '🔔 Alarm rang for: ${ringing.join(', ')}',
-                      style: const TextStyle(fontStyle: FontStyle.italic)),
-                  ...report,
-                ])),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('OK'))
-        ],
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReportPage(
+          title: 'Check result · ${took}s',
+          highlight: ringing.isNotEmpty,
+          intro: ringing.isEmpty
+              ? 'Each theater rings once per movie. To ring again, use '
+                  'Settings → Reset alerts. Tap a date to open it in BookMyShow.'
+              : '🔔 Alarm rang for: ${ringing.join(', ')}',
+          sections: sections,
+        ),
       ),
     );
   }
 
+  void _openBackgroundReport(List report) => Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ReportPage.text(
+            title: 'Background report',
+            intro: 'This is exactly what the tracker that rings the alarm saw '
+                'on its last check. Long-press to copy it into a bug report.',
+            blocks: report.cast<String>(),
+          ),
+        ),
+      );
+
   // ---------------------------------------------------------------- movies
 
   Future<void> _addMovie() async {
-    final m = await showDialog<Movie>(
-        context: context, builder: (_) => MovieDialog(city: cfg!.city));
+    final m = await Navigator.push<Movie>(context,
+        MaterialPageRoute(builder: (_) => MoviePage(city: cfg!.city)));
     if (m == null) return;
     final c = cfg!;
     final existed = c.movies.any((x) => x.id == m.id);
     final list = [...c.movies.where((x) => x.id != m.id), m];
     await _save(c.copyWith(movies: list));
-    if (existed) _snack('${m.title} in ${m.city} was already added – updated it.');
+    if (existed) _snack('${m.title} in ${m.city} was already added. Updated it.');
     if (cfg!.city.isEmpty) await _save(cfg!.copyWith(city: m.city));
     if (!mounted) return;
     if (cfg!.theaters.isEmpty) {
       final load = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.theaters_outlined),
           title: const Text('Pick your theaters?'),
-          content: Text('Load the list of ${m.city} theaters from BookMyShow '
-              'and tick the ones you want. Without any ticked theater, the '
-              'alarm rings when booking opens anywhere in the city.'),
+          content: Text('Load the list of ${cityName(m.city)} theaters from '
+              'BookMyShow and tick the ones you want. Without any ticked '
+              'theater, the alarm rings when booking opens anywhere in the city.'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -282,140 +279,49 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ],
         ),
       );
-      if (load == true) await _loadTheatersFromBms(fromLink: m.url);
+      if (load == true) await _openTheaters(autoLoadFrom: m.url);
     }
   }
 
   Future<void> _editMovie(Movie m) async {
-    final edited = await showDialog<Movie>(
-        context: context,
-        builder: (_) => MovieDialog(city: cfg!.city, existing: m));
+    final edited = await Navigator.push<Movie>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => MoviePage(city: cfg!.city, existing: m)));
     if (edited == null) return;
     await _save(cfg!.copyWith(
         movies: cfg!.movies.map((x) => x.id == m.id ? edited : x).toList()));
   }
 
-  // ---------------------------------------------------------------- theaters
-
-  Future<void> _editTheater([Theater? t]) async {
-    final res = await showDialog<Theater>(
-        context: context, builder: (_) => TheaterDialog(existing: t));
-    if (res == null) return;
-    final list = [...cfg!.theaters];
-    final i = t == null ? -1 : list.indexWhere((x) => x.id == t.id);
-    if (i >= 0) {
-      list[i] = res;
-    } else if (!list.any((x) => x.id == res.id)) {
-      list.add(res);
-    }
-    await _save(cfg!.copyWith(theaters: list));
-  }
-
-  Future<void> _deleteTheater(Theater t) async {
-    await _save(cfg!.copyWith(
-        theaters: cfg!.theaters.where((x) => x.id != t.id).toList()));
-  }
-
-  Future<void> _loadTheatersFromBms({String? fromLink}) async {
-    final ctrl = TextEditingController();
-    final url = fromLink ?? await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Load theaters from BookMyShow'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text(
-              'Paste the BookMyShow link of ANY movie that is running in '
-              'your city today (movie page or "Book tickets" page).'),
-          TextField(
-              controller: ctrl,
-              decoration: const InputDecoration(labelText: 'BookMyShow link')),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, ctrl.text),
-              child: const Text('Load')),
-        ],
-      ),
-    );
-    if (url == null || extractUrl(url) == null) return;
-    final link = extractUrl(url)!;
-    // A plain movie page lists no theaters: open its show-times
-    // ("Book tickets") page for today, then the next two days.
-    final candidates = <String>[];
-    final parsed = parseMovieUrl(link, city: cfg!.city);
-    if (link.toLowerCase().contains('buytickets') || parsed == null) {
-      candidates.add(link);
-    } else {
-      final today = DateTime.now();
-      final m = Movie(
-          title: '',
-          url: link,
-          eventCode: parsed.eventCode,
-          slug: parsed.slug,
-          city: parsed.city ?? cfg!.city,
-          startDate: today);
-      for (var i = 0; i < 3; i++) {
-        candidates.add(buildShowtimesUrl(cfg!.showtimesTemplate, m,
-            DateTime(today.year, today.month, today.day + i)));
-      }
-    }
-    setState(() => testing = true);
-    _snack('Loading theaters from BookMyShow…');
-    final loader = PageLoader();
-    List<String> names = [];
-    String? err;
-    try {
-      for (final c in candidates) {
-        final page = await loader.load(c);
-        names = extractVenueNames(page.body);
-        if (names.isNotEmpty) break;
-        err = 'No theater names found.\n${describePage(page)}';
-      }
-    } catch (e) {
-      err = '$e';
-    } finally {
-      await loader.close();
-    }
+  Future<void> _deleteMovie(Movie m) async {
+    final before = cfg!;
+    await _save(before.copyWith(
+        movies: before.movies.where((x) => x.id != m.id).toList()));
     if (!mounted) return;
-    setState(() => testing = false);
-    if (names.isEmpty) {
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Could not load theaters'),
-          content: SingleChildScrollView(
-              child: SelectableText('${err ?? ''}\n\n'
-                  'Add theaters manually with "Add theater" instead.')),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('OK'))
-          ],
+    _snack('Deleted ${m.title}',
+        action: SnackBarAction(label: 'Undo', onPressed: () => _save(before)));
+  }
+
+  // ---------------------------------------------------------------- pages
+
+  Future<void> _openTheaters({String? autoLoadFrom}) => Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TheatersPage(
+              cfg: cfg!, onChanged: _save, autoLoadFrom: autoLoadFrom),
         ),
       );
-      return;
-    }
-    final existing = cfg!.theaters.map((t) => normalize(t.name)).toSet();
-    final picked = await showDialog<List<String>>(
-        context: context,
-        builder: (_) => PickNamesDialog(
-            names: names.where((n) => !existing.contains(normalize(n))).toList()));
-    if (picked == null || picked.isEmpty) return;
-    final list = [
-      ...cfg!.theaters,
-      for (final n in picked) Theater(name: n, keyword: n, selected: true),
-    ];
-    await _save(cfg!.copyWith(theaters: list));
-  }
-
-  // ---------------------------------------------------------------- settings
 
   Future<void> _settings() async {
-    final res = await showDialog<TrackerConfig>(
-        context: context, builder: (_) => SettingsDialog(cfg: cfg!));
+    final res = await Navigator.push<TrackerConfig>(
+        context,
+        MaterialPageRoute(
+            builder: (_) =>
+                SettingsPage(cfg: cfg!, onTestAlarm: _testAlarm)));
     if (res != null) await _save(res);
   }
+
+  // ---------------------------------------------------------------- build
 
   @override
   Widget build(BuildContext context) {
@@ -433,194 +339,199 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final showError = st?['error'] != null &&
         errTime != null &&
         (stTime == null || !errTime.isBefore(stTime));
+    final stale = running && stTime != null && _isStale(stTime, st?['took'] as int?, c);
+    final states = <String, Map<String, String>>{
+      for (final e in ((st?['states'] as Map?) ?? {}).entries)
+        '${e.key}': {
+          for (final d in (e.value as Map).entries) '${d.key}': '${d.value}'
+        },
+    };
+    final warnings = <String>[
+      for (final l in ((st?['lines'] as List?) ?? const []))
+        if ('$l'.contains('⚠')) '$l',
+    ];
+    final enabled = c.movies.where((m) => m.enabled).length;
+    String hm(DateTime t) => TimeOfDay.fromDateTime(t).format(context);
+    final lastCheck = stTime == null
+        ? 'First check starting…'
+        : 'Last check ${hm(stTime)}'
+            '${st?['took'] == null ? '' : ' · took ${st!['took']}s'}';
+
+    final (TrackerState state, String title, String subtitle) = !running
+        ? (
+            TrackerState.off,
+            'Tracking is off',
+            c.movies.isEmpty
+                ? 'Add a movie, then start tracking.'
+                : 'Start tracking to get an alarm when booking opens.'
+          )
+        : showError
+            ? (
+                TrackerState.error,
+                'Check failed',
+                'At ${hm(errTime)}: ${st!['error']}. Retrying automatically.'
+              )
+            : stale
+                ? (
+                    TrackerState.paused,
+                    'Paused by your phone',
+                    'No check since ${hm(stTime)}. Set Battery → BMS Tracker → '
+                        'Unrestricted, then stop and start tracking.'
+                  )
+                : st?['open'] == true
+                    ? (
+                        TrackerState.open,
+                        'Booking open!',
+                        'At your theater. Tap the alarm notification to book. '
+                            '$lastCheck'
+                      )
+                    : (
+                        TrackerState.watching,
+                        'Watching $enabled movie${enabled == 1 ? '' : 's'}',
+                        'Every ~${c.intervalSeconds}s · $lastCheck'
+                      );
+
+    final selected = c.selectedTheaters;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BMS Tracker'),
+        title: Row(children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(Icons.confirmation_number_outlined,
+                size: 18, color: scheme.onPrimary),
+          ),
+          const SizedBox(width: 10),
+          const Text('BMS Tracker'),
+        ]),
         actions: [
-          IconButton(onPressed: _settings, icon: const Icon(Icons.settings)),
-          Switch(value: running, onChanged: _toggle),
-          const SizedBox(width: 8),
+          IconButton(
+              tooltip: 'Settings',
+              onPressed: _settings,
+              icon: const Icon(Icons.settings_outlined)),
+          const SizedBox(width: 4),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addMovie,
-        icon: const Icon(Icons.add),
-        label: const Text('Movie'),
-      ),
+      floatingActionButton: c.movies.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _addMovie,
+              icon: const Icon(Icons.add),
+              label: const Text('Add movie'),
+            ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 104),
           children: [
-            Card(
-              color: running
-                  ? (st?['open'] == true
-                      ? Colors.green.withValues(alpha: 0.25)
-                      : null)
-                  : Theme.of(context).colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                        running
-                            ? 'Tracking ON – every ~${c.intervalSeconds}s'
-                            : 'Tracking OFF – turn on the switch above',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    if (showError)
-                      Text(
-                          '⚠ Background check failed at '
-                          '${TimeOfDay.fromDateTime(errTime).format(context)}: ${st!['error']}',
-                          style: const TextStyle(color: Colors.red)),
-                    if (stTime != null) ...[
-                      const SizedBox(height: 4),
-                      Text('Last check: ${TimeOfDay.fromDateTime(stTime).format(context)}'
-                          ' (${shortDate(stTime)})'
-                          '${st!['took'] == null ? '' : ' · took ${st['took']}s'}'),
-                      if (running && _isStale(stTime, st['took'] as int?, c))
-                        const Text(
-                            '⚠ No check for a while: the phone may have paused the '
-                            'tracker. Set Battery → BMS Tracker → Unrestricted, keep '
-                            'the "watching" notification, then switch tracking off and on.',
-                            style: TextStyle(color: Colors.red)),
-                      for (final l in (st['lines'] as List)) Text('• $l'),
-                      if (st['blocked'] == true)
-                        const Text(
-                            '⚠ BookMyShow refused some requests. If this keeps '
-                            'happening, switch Wi-Fi/mobile data or raise the interval.',
-                            style: TextStyle(color: Colors.orange)),
-                    ],
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, children: [
-                      OutlinedButton.icon(
-                        onPressed: testing ? null : _testNow,
-                        icon: testing
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.search),
-                        label: const Text('Check now'),
-                      ),
-                      if (st?['report'] != null)
-                        OutlinedButton.icon(
-                          onPressed: () => showDialog<void>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Last background check'),
-                              content: SingleChildScrollView(
-                                child: SelectableText(
-                                    'This is what the tracker that rings the alarm saw.\n\n'
-                                    '${(st!['report'] as List).join('\n\n')}'),
-                              ),
-                              actions: [
-                                TextButton(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    child: const Text('OK'))
-                              ],
-                            ),
-                          ),
-                          icon: const Icon(Icons.history),
-                          label: const Text('Background report'),
-                        ),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          await _askPermissions();
-                          await showTicketsOpenAlarm(
-                              title: '🎟️ Test alarm',
-                              body: 'This is how the alert will look and sound.',
-                              url: c.city.isEmpty
-                                  ? 'https://in.bookmyshow.com/'
-                                  : 'https://in.bookmyshow.com/explore/movies-${c.city}');
-                        },
-                        icon: const Icon(Icons.alarm),
-                        label: const Text('Test alarm'),
-                      ),
-                    ]),
-                  ],
+            StatusHero(
+              state: state,
+              title: title,
+              subtitle: subtitle,
+              running: running,
+              onToggle: () => _toggle(!running),
+            ),
+            if (running && st?['blocked'] == true) ...[
+              const SizedBox(height: 10),
+              const InfoBanner(
+                  icon: Icons.block,
+                  text: 'BookMyShow refused some requests. If this keeps '
+                      'happening, switch between Wi-Fi and mobile data or '
+                      'raise the check interval in Settings.'),
+            ],
+            for (final w in warnings) ...[
+              const SizedBox(height: 10),
+              InfoBanner(icon: Icons.event_busy, text: w),
+            ],
+            const SizedBox(height: 12),
+            Row(children: [
+              QuickAction(
+                  icon: Icons.search,
+                  label: 'Check now',
+                  busy: testing,
+                  onTap: c.movies.isEmpty ? null : _testNow),
+              const SizedBox(width: 10),
+              QuickAction(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Report',
+                  onTap: st?['report'] == null
+                      ? null
+                      : () => _openBackgroundReport(st!['report'] as List)),
+              const SizedBox(width: 10),
+              QuickAction(
+                  icon: Icons.alarm, label: 'Test alarm', onTap: _testAlarm),
+            ]),
+            SectionHeader(
+              c.movies.isEmpty ? 'Movies' : 'Movies · ${c.movies.length}',
+            ),
+            if (c.movies.isEmpty)
+              GettingStarted(onAddMovie: _addMovie)
+            else
+              for (final m in c.movies) ...[
+                MovieCard(
+                  movie: m,
+                  states: states[m.id] ?? const {},
+                  onTap: () => _editMovie(m),
+                  onDelete: () => _deleteMovie(m),
+                  onToggle: (v) => _save(c.copyWith(
+                      movies: c.movies
+                          .map((x) => x.id == m.id ? x.copyWith(enabled: v) : x)
+                          .toList())),
                 ),
+                const SizedBox(height: 10),
+              ],
+            const SectionHeader('Theaters'),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                leading: CircleAvatar(
+                  backgroundColor: scheme.secondaryContainer,
+                  child: Icon(Icons.theaters_outlined,
+                      color: scheme.onSecondaryContainer),
+                ),
+                title: Text(
+                    c.theaters.isEmpty
+                        ? 'No theaters yet'
+                        : selected.isEmpty
+                            ? 'Any theater'
+                            : '${selected.length} of ${c.theaters.length} selected',
+                    style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                subtitle: Text(
+                  c.theaters.isEmpty
+                      ? 'Load your city\'s theaters from BookMyShow'
+                      : selected.isEmpty
+                          ? 'No theater ticked: the alarm rings for any theater'
+                          : selected.map((t) => t.name).join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _openTheaters(),
               ),
             ),
             if (alarms.isNotEmpty) ...[
-              const _Header('Recent alarms'),
-              for (final a in alarms.take(5))
-                ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.alarm_on),
-                  title: Text(a.$2),
-                  subtitle: Text('${TimeOfDay.fromDateTime(a.$1).format(context)} · ${shortDate(a.$1)}'),
-                ),
-            ],
-            const _Header('Movies'),
-            if (c.movies.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text(
-                    'Tap "+ Movie" and paste the BookMyShow link of the movie '
-                    '(e.g. Avengers: Doomsday). In the BookMyShow app: open the '
-                    'movie → Share → Copy link.'),
-              ),
-            for (final m in c.movies)
+              const SectionHeader('Recent alarms'),
               Card(
-                child: ListTile(
-                  title: Text(m.title),
-                  subtitle: Text('${m.dates.map(shortDate).join(', ')} · ${m.city} · all languages & formats'),
-                  onTap: () => _editMovie(m),
-                  leading: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _save(c.copyWith(
-                        movies: c.movies.where((x) => x.id != m.id).toList())),
-                  ),
-                  trailing: Switch(
-                    value: m.enabled,
-                    onChanged: (v) => _save(c.copyWith(
-                        movies: c.movies
-                            .map((x) => x.id == m.id ? x.copyWith(enabled: v) : x)
-                            .toList())),
-                  ),
-                ),
-              ),
-            _Header('Theaters (${c.selectedTheaters.length} selected)'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                c.selectedTheaters.isEmpty
-                    ? 'No theater selected: the alarm rings when booking opens at any theater.'
-                    : c.alertAnyTheater
-                        ? 'Alarm for your theaters, plus one alarm when booking opens at any other theater.'
-                        : 'Alarm only when a selected theater has shows on your dates.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-            for (final t in c.theaters)
-              CheckboxListTile(
-                value: t.selected,
-                title: Text(t.name),
-                subtitle: Text('matches "${t.keyword}"'),
-                onChanged: (v) => _save(c.copyWith(
-                    theaters: c.theaters
-                        .map((x) => x.id == t.id ? x.copyWith(selected: v) : x)
-                        .toList())),
-                secondary: PopupMenuButton<String>(
-                  onSelected: (a) =>
-                      a == 'edit' ? _editTheater(t) : _deleteTheater(t),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                child: Column(children: [
+                  for (final (i, a) in alarms.take(5).indexed) ...[
+                    if (i > 0) const Divider(height: 1, indent: 56, endIndent: 16),
+                    ListTile(
+                      leading: Icon(Icons.notifications_active_outlined,
+                          color: scheme.primary),
+                      title: Text(a.$2, style: text.bodyMedium),
+                      subtitle: Text('${hm(a.$1)} · ${shortDate(a.$1)}'),
+                    ),
                   ],
-                ),
+                ]),
               ),
-            Wrap(spacing: 8, children: [
-              TextButton.icon(
-                  onPressed: () => _editTheater(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add theater')),
-              TextButton.icon(
-                  onPressed: () => _loadTheatersFromBms(),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Load from BookMyShow')),
-            ]),
+            ],
           ],
         ),
       ),
@@ -628,321 +539,80 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-        child: Text(text, style: Theme.of(context).textTheme.titleLarge),
-      );
-}
+/// One movie's "Check now" result: a row per language/format and date.
+class _CheckResultCard extends StatelessWidget {
+  const _CheckResultCard({
+    required this.movie,
+    required this.versions,
+    required this.results,
+    required this.cfg,
+    required this.alerted,
+  });
 
-// ------------------------------------------------------------------ dialogs
-
-class MovieDialog extends StatefulWidget {
-  const MovieDialog({super.key, required this.city, this.existing});
-  final String city;
-  final Movie? existing;
-  @override
-  State<MovieDialog> createState() => _MovieDialogState();
-}
-
-class _MovieDialogState extends State<MovieDialog> {
-  late final url = TextEditingController(text: widget.existing?.url ?? '');
-  late final title = TextEditingController(text: widget.existing?.title ?? '');
-  late DateTime start = widget.existing?.startDate ?? _defaultStart();
-  late int days = widget.existing?.days ?? 1;
-  late final city = TextEditingController(text: widget.existing?.city ?? widget.city);
-  String? error;
-
-  static DateTime _defaultStart() {
-    final today = DateTime.now();
-    return DateTime(today.year, today.month, today.day);
-  }
-
-  void _urlChanged(String v) {
-    final p = parseMovieUrl(v, city: city.text.trim());
-    if (p != null && title.text.trim().isEmpty) title.text = p.suggestedTitle;
-    if (p?.city != null) city.text = p!.city!;
-    setState(() => error = null);
-  }
-
-  void _submit() {
-    final p = parseMovieUrl(url.text, city: city.text.trim());
-    final c = city.text.trim().toLowerCase();
-    if (p == null) {
-      setState(() => error =
-          'Link must contain the movie code (ET00…). Copy it from the movie page on BookMyShow.');
-      return;
-    }
-    if (c.isEmpty && p.city == null && widget.city.isEmpty) {
-      setState(() => error =
-          'Enter your BookMyShow city below (the word after /movies/ in '
-          'a BookMyShow link, e.g. "chennai").');
-      return;
-    }
-    Navigator.pop(
-      context,
-      Movie(
-        title: title.text.trim().isEmpty ? p.suggestedTitle : title.text.trim(),
-        url: p.url,
-        eventCode: p.eventCode,
-        slug: p.slug,
-        city: c.isEmpty ? (p.city ?? widget.city) : c,
-        allVersions: true, // every language & format is always checked
-        startDate: start,
-        days: days,
-        enabled: widget.existing?.enabled ?? true,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.existing == null ? 'Add movie' : 'Edit movie'),
-      content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: url,
-            onChanged: _urlChanged,
-            minLines: 1,
-            maxLines: 3,
-            decoration: InputDecoration(
-              labelText: 'BookMyShow movie link',
-              hintText:
-                  'https://in.bookmyshow.com/movies/<city>/<movie>/ET00…',
-              errorText: error,
-              errorMaxLines: 3,
-              helperText:
-                  'Any BookMyShow link of the movie (movie page or "Book tickets" '
-                  'page). Every language and format is checked automatically.',
-              helperMaxLines: 4,
-            ),
-          ),
-          TextField(
-              controller: title,
-              decoration: const InputDecoration(labelText: 'Title')),
-          TextField(
-              controller: city,
-              decoration: const InputDecoration(
-                  labelText: 'BookMyShow city',
-                  helperText:
-                      'Filled from the link. Some places have two BookMyShow '
-                      'cities; add the movie once for each to watch both.',
-                  helperMaxLines: 3)),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Show date to watch'),
-            subtitle: Text('${shortDate(start)} ${start.year}'),
-            trailing: const Icon(Icons.calendar_month),
-            onTap: () async {
-              final d = await showDatePicker(
-                context: context,
-                initialDate: start,
-                firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                lastDate: DateTime.now().add(const Duration(days: 365)),
-              );
-              if (d != null) setState(() => start = d);
-            },
-          ),
-          Row(children: [
-            const Expanded(
-                child: Text('Days to watch (from that date)')),
-            IconButton(
-                onPressed: days > 1 ? () => setState(() => days--) : null,
-                icon: const Icon(Icons.remove)),
-            Text('$days'),
-            IconButton(
-                onPressed: days < 7 ? () => setState(() => days++) : null,
-                icon: const Icon(Icons.add)),
-          ]),
-        ]),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Save')),
-      ],
-    );
-  }
-}
-
-class TheaterDialog extends StatefulWidget {
-  const TheaterDialog({super.key, this.existing});
-  final Theater? existing;
-  @override
-  State<TheaterDialog> createState() => _TheaterDialogState();
-}
-
-class _TheaterDialogState extends State<TheaterDialog> {
-  late final name = TextEditingController(text: widget.existing?.name ?? '');
-  late final kw = TextEditingController(text: widget.existing?.keyword ?? '');
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.existing == null ? 'Add theater' : 'Edit theater'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(
-            controller: name,
-            decoration: const InputDecoration(labelText: 'Name')),
-        TextField(
-            controller: kw,
-            decoration: const InputDecoration(
-                labelText: 'Match keyword',
-                helperText:
-                    'A distinctive word from the theater name as shown on '
-                    'BookMyShow. Several spellings: Thiruverumbur|Tiruverumbur',
-                helperMaxLines: 2)),
-      ]),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        FilledButton(
-          onPressed: () {
-            final n = name.text.trim();
-            final k = kw.text.trim().isEmpty ? n : kw.text.trim();
-            if (n.isEmpty || normalize(k).isEmpty) return;
-            Navigator.pop(
-                context,
-                Theater(
-                    name: n,
-                    keyword: k,
-                    selected: widget.existing?.selected ?? true));
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    );
-  }
-}
-
-class PickNamesDialog extends StatefulWidget {
-  const PickNamesDialog({super.key, required this.names});
-  final List<String> names;
-  @override
-  State<PickNamesDialog> createState() => _PickNamesDialogState();
-}
-
-class _PickNamesDialogState extends State<PickNamesDialog> {
-  final picked = <String>{};
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('${widget.names.length} new theaters found'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView(shrinkWrap: true, children: [
-          for (final n in widget.names)
-            CheckboxListTile(
-              value: picked.contains(n),
-              title: Text(n),
-              onChanged: (v) =>
-                  setState(() => v == true ? picked.add(n) : picked.remove(n)),
-            ),
-        ]),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        FilledButton(
-            onPressed: () => Navigator.pop(context, picked.toList()),
-            child: const Text('Add selected')),
-      ],
-    );
-  }
-}
-
-class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key, required this.cfg});
+  final Movie movie;
+  final List<String> versions;
+  final List<DateCheck> results;
   final TrackerConfig cfg;
-  @override
-  State<SettingsDialog> createState() => _SettingsDialogState();
-}
-
-class _SettingsDialogState extends State<SettingsDialog> {
-  late double interval = widget.cfg.intervalSeconds.toDouble();
-  late bool any = widget.cfg.alertAnyTheater;
-  late final city = TextEditingController(text: widget.cfg.city);
-  late final template =
-      TextEditingController(text: widget.cfg.showtimesTemplate);
+  final Set<String> alerted;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Settings'),
-      content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Check every ${interval.round()} seconds'),
-          Slider(
-              min: 30,
-              max: 300,
-              divisions: 27,
-              value: interval,
-              onChanged: (v) => setState(() => interval = v)),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: any,
-            onChanged: (v) => setState(() => any = v),
-            title: const Text('Also alarm when booking opens at other theaters'),
-            subtitle: const Text('Off: alarm only for your selected theaters.'),
-          ),
-          TextField(
-              controller: city,
-              decoration: const InputDecoration(
-                  labelText: 'Default BookMyShow city',
-                  helperText: 'Used when a movie link has no city. Each movie keeps the city from its own link.',
-                  helperMaxLines: 2)),
-          TextField(
-              controller: template,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                  labelText: 'Show-times URL pattern (advanced)',
-                  helperText: '{city} {slug} {event} {date}')),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, children: [
-            OutlinedButton(
-                onPressed: () async {
-                  await Storage.clearAlerted();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Alerts reset – you will be alarmed again.')));
-                  }
-                },
-                child: const Text('Reset alerts')),
-            OutlinedButton(
-                onPressed: () => template.text = defaultShowtimesTemplate,
-                child: const Text('Default pattern')),
-          ]),
-        ]),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            widget.cfg.copyWith(
-              intervalSeconds: interval.round(),
-              alertAnyTheater: any,
-              city: city.text.trim().isEmpty
-                  ? defaultCity
-                  : city.text.trim().toLowerCase(),
-              showtimesTemplate: template.text.trim().isEmpty
-                  ? defaultShowtimesTemplate
-                  : template.text.trim(),
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text('${movie.title} · ${cityName(movie.city)}',
+              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+              'Languages/formats found: ${versions.length} (${versions.join(', ')})',
+              style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ),
+        for (final r in results) ...[
+          const Divider(height: 1),
+          ListTile(
+            onTap: () => openBookMyShow(r.url),
+            title: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  DateChip(
+                    label: shortDate(r.date),
+                    state: switch (r.outcome) {
+                      Outcome.open when !isOpenForUser(r, cfg.selectedTheaters) =>
+                        'elsewhere',
+                      Outcome.open => 'open',
+                      Outcome.notOpen => 'waiting',
+                      Outcome.blocked => 'blocked',
+                      Outcome.error => 'error',
+                    },
+                  ),
+                  Text(
+                      [
+                        if (r.label.isNotEmpty) r.label else if (r.version.isNotEmpty) r.version,
+                        if (r.format.isNotEmpty) r.format,
+                      ].join(' · '),
+                      style: text.bodyMedium),
+                ]),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: SelectableText([
+                if (r.venues.isNotEmpty)
+                  'Theaters with shows: ${r.venues.join(' | ')}',
+                if (r.matchedTheaters.isNotEmpty)
+                  'Your theaters: ${r.matchedTheaters.map((t) => '${t.name} (${alerted.contains('${movie.id}|${t.id}') ? 'alarm already rang earlier' : 'alarm ringing now'})').join(', ')}',
+                r.detail,
+                if (r.debug.isNotEmpty) r.debug,
+              ].join('\n')),
             ),
           ),
-          child: const Text('Save'),
-        ),
-      ],
+        ],
+      ]),
     );
   }
 }

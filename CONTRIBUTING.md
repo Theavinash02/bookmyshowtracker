@@ -43,7 +43,8 @@ debug key, which is fine for testing.
 
 | File | What it does |
 |---|---|
-| `lib/main.dart` | The whole UI: home screen, movie, theater and settings dialogs, "Check now" |
+| `lib/main.dart` | App start and the home screen: tracking on/off, "Check now", movie list |
+| `lib/ui/` | The other screens and shared widgets: `movie_page.dart`, `theaters_page.dart`, `settings_page.dart`, `report_page.dart`, `widgets.dart` (status card, movie card, date chips) and `theme.dart` (colours, light/dark) |
 | `lib/background.dart` | Foreground service that runs a check every *N* seconds and rings alarms |
 | `lib/checker.dart` | Pure logic: parse BookMyShow links, build show-time URLs, find theaters and dates in a page, decide what is "open". Most of the tests cover this file. |
 | `lib/web_fetcher.dart` | Hidden in-app browser (`flutter_inappwebview`) that loads BookMyShow pages like a real user |
@@ -71,10 +72,17 @@ CI builds an APK for every branch, so you can download it from the run's
 
 ## Releases (maintainers)
 
-Every merge to `main` publishes a GitHub release with `bms-tracker.apk`.
-The version number doesn't change by itself: raise `version:` in
-`pubspec.yaml` (both parts, e.g. `0.4.0+21` → `0.4.1+22`) when the change is
-user-visible.
+Every merge to `main` is built and tested, but a GitHub release is
+published **only when the version changes**. To release:
+
+1. In your PR, raise `version:` in `pubspec.yaml`, both parts, e.g.
+   `0.5.0+22` → `0.5.1+23`. Use the middle number for new features and the
+   last one for fixes. The part after `+` must always go up.
+2. Merge it. CI publishes release `v0.5.1` with `bms-tracker.apk` and
+   notes listing the merged pull requests.
+
+Merges that keep the same version (docs, small fixes you want to bundle)
+don't create a release.
 
 Release APKs are signed with the project's permanent key, so updates install
 over the old app. CI reads it from these repository secrets (*Settings →
